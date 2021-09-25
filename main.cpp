@@ -121,6 +121,11 @@ struct InterBasic {
 			printf("[%s]  ", t.c_str());
 		printf("\n");
 	}
+	void showenv() const {
+		printf("env :: \n");
+		for (auto& v : vars)
+			printf("	%s : %s\n", v.first.c_str(), stringify(v.second).c_str() );
+	}
 
 
 	// runtime
@@ -135,17 +140,22 @@ struct InterBasic {
 		pos = 1;
 		if      (cmd == "")         ;  // empty line
 		else if (is_comment(cmd))   ;  // empty line (with comment)
+		// dim / undim
 		else if (cmd == "let" || cmd == "local") {
+			if (cmd == "local" && callstack.size() == 0)  throw IBError("no local scope", lno);
 			auto& id = tok_get();
 			auto& eq = tok_get();
+			auto& vv = cmd == "local" ? callstack.back().vars : vars;
 			if (eq != "=")  throw IBError("missing =", lno);
-			if      (cmd == "let")    vars[id] = expr();
-			else if (cmd == "local")  throw IBError();
+			vv[id] = expr();
 		}
-		else if (cmd == "unlet") {
+		else if (cmd == "unlet" || cmd == "unlocal") {
+			if (cmd == "unlocal" && callstack.size() == 0)  throw IBError("no local scope", lno);
 			auto& id = tok.at(1);
-			if (vars.count(id))  vars.erase(id);  // can unlet missing vars, for simplicity
+			auto& vv = cmd == "unlocal" ? callstack.back().vars : vars;
+			if (vv.count(id))  vv.erase(id);  // can unlet missing vars, for simplicity
 		}
+		// print command
 		else if (cmd == "print") {
 			string s;
 			int ii = 0;
@@ -161,6 +171,7 @@ struct InterBasic {
 			}
 			printf("\n");
 		}
+		// ... various
 		else if (cmd == "if") {
 			auto v = expr();
 			if (v.type != VAR_INTEGER)  throw IBError("expected integer");
@@ -169,57 +180,35 @@ struct InterBasic {
 		else if (cmd == "call") {
 			auto& id   = tok_get();
 			int   argc = 0;
-			if (tok_peek() == ":") tok_get();  // args start
-			while (pos < tok.size())
-				if      (is_comment(tok_peek()))  tok_get();
-				else if (tok_peek() == ",")  tok_get();
-				else    vars["_arg"+to_string(++argc)] = expr();
-			callstack.push_back({ lno });
-			if    (sysfunc(id))  ;
+			callstack.push_back({ lno });  // new stack frame
+			//callstack.back().vars["_ret"] = { VAR_NULL }:
+			if (tok_peek() == ":") {  // args start
+				tok_get();
+				while (pos < tok.size())
+					if      (is_comment(tok_peek()))  tok_get();
+					else if (tok_peek() == ",")  tok_get();
+					else    callstack.back().vars["_arg"+to_string(++argc)] = expr();
+			}
+			if    (sysfunc(id))  ;  // run system function, if possible
 			else  lno = find_line({ "function", id }, 0);  // jump to function block definition
 		}
 		else if (cmd == "function")  lno = find_line({ "end", "function" }, lno);  // skip function block
 		else if (cmd == "die")       lno = lines.size();  // jump to end, and so halt
+		//else if (cmd == "return")    unstack();
 		else if (cmd == "return") {
 			if (callstack.size() == 0)  throw IBError("'return' outside of call");
 			lno = callstack.back().lno,  callstack.pop_back();
 		}
 		else if (cmd == "end") {
 			auto &block_type = tok.at(1);
-			if      (block_type == "if")       ; // ignore for now
+			if      (block_type == "if")        ; // ignore for now
+			//else if (block_type == "function")  unstack();
 			else if (block_type == "function") {
 				if (callstack.size() == 0)  throw IBError("'end function' outside of call");
 				lno = callstack.back().lno,  callstack.pop_back();
 			}
 		}
 		else    throw IBError("unknown command: " + cmd, lno);
-	}
-
-	int sysfunc(const string& id) {
-		// array or string length
-		if (id == "len") {
-			auto& v = get_def("_arg1");
-			auto& r = vars["_ret"] = { VAR_INTEGER, 0 };
-			if      (v.type == VAR_STRING)  r.i = v.s.length();
-			else if (v.type == VAR_ARRAY)   r.i = v.arr.size();
-			else    throw IBError("expected array or string", lno);
-		}
-		// split string by whitespace
-		else if (id == "split") {
-			string s;
-			auto& v = get_def("_arg1");
-			auto& r = vars["_ret"] = { VAR_ARRAY };
-			if (v.type != VAR_STRING)  throw IBError("expected string", lno);
-			for (auto c : v.s)
-				if (isspace(c)) {
-					if (s.size()) r.arr.push_back({ VAR_STRING, .s=s });
-					s = "";
-				}
-				else  s += c;
-			if (s.size()) r.arr.push_back({ VAR_STRING, .s=s });
-		}
-		else  return 0;
-		return 1;
 	}
 
 
@@ -261,8 +250,9 @@ struct InterBasic {
 
 	// runtime helpers
 	Var& get_def(const string& id) {
-		if (!vars.count(id))  throw IBError("undefined variable: "+id);
-		return vars.at(id);
+		if (callstack.size() && callstack.back().vars.count(id))  return callstack.back().vars[id];
+		if (vars.count(id))  return vars.at(id);
+		throw IBError("undefined variable: "+id);
 	}
 	int find_line(const vector<string>& pattern, int start) const {
 		for (int i=start; i<lines.size(); i++) {
@@ -287,16 +277,62 @@ struct InterBasic {
 		throw IBError("find_end: no matching 'end " + type + "'", start);
 	}
 
+//	int unstack() {
+//		if (callstack.size() == 0)  throw IBError("can't return from function", lno);
+//		lno = callstack.back().lno;
+//		//auto& parent_vars = callstack.size() > 1 ? callstack[callstack.size()-2].vars : vars;
+//		//parent_vars["_ret"] = callstack.back().vars["_ret"];
+//		callstack.pop_back();
+//		return 0;
+//	}
+
+	// runtime system functions
+	int sysfunc(const string& id) {
+		// array or string length
+		if (id == "len") {
+			auto& v = get_def("_arg1");
+			auto& r = vars["_ret"] = { VAR_INTEGER, 0 };
+			if      (v.type == VAR_STRING)  r.i = v.s.length();
+			else if (v.type == VAR_ARRAY)   r.i = v.arr.size();
+			else    throw IBError("expected array or string", lno);
+		}
+		// array position
+		else if (id == "at") {
+			auto& v = get_def("_arg1");
+			auto& p = get_def("_arg2");
+			if (v.type != VAR_ARRAY || p.type != VAR_INTEGER)  throw IBError("expected array, integer", lno);
+			if (p.i < 0 || p.i >= v.arr.size())  throw IBError("index out of range: "+to_string(p.i), lno);
+			vars["_ret"] = v.arr.at(p.i);
+		}
+		// split string by whitespace
+		else if (id == "split") {
+			string s;
+			auto& v = get_def("_arg1");
+			auto& r = vars["_ret"] = { VAR_ARRAY };
+			if (v.type != VAR_STRING)  throw IBError("expected string", lno);
+			for (auto c : v.s)
+				if (isspace(c)) {
+					if (s.size()) r.arr.push_back({ VAR_STRING, .s=s });
+					s = "";
+				}
+				else  s += c;
+			if (s.size()) r.arr.push_back({ VAR_STRING, .s=s });
+		}
+		else  return 0;
+		return 1;
+	}
+
+
 
 	// type conversion
-	Var to_var(const string& s) {
+	Var to_var(const string& s) const {
 		Var v = { VAR_NULL };
 		if      (s == "null")          return v;
 		else if (is_integer(s, &v.i))  return v.type=VAR_INTEGER, v;
 		else if (is_literal(s, &v.s))  return v.type=VAR_STRING, v;
 		throw IBError("expected Var, got ["+s+"]", lno);
 	}
-	string stringify(const Var& v) {
+	string stringify(const Var& v) const {
 		switch (v.type) {
 		case VAR_NULL:     return "null";
 		case VAR_INTEGER:  return std::to_string(v.i);
@@ -305,32 +341,31 @@ struct InterBasic {
 		}
 		throw IBError();
 	}
-
-
 	// type identification
-	int is_integer(const string& s, int *r=NULL) {
+	int is_integer(const string& s, int *r=NULL) const {
 		if (s.length() == 0)  return 0;
 		for (int i=0; i<s.length(); i++)
 			if (!isdigit(s[i]))  return 0;
 		if (r)  *r = stoi(s);
 		return 1;
 	}
-	int is_literal(const string& s, string *r=NULL) {
+	int is_literal(const string& s, string *r=NULL) const {
 		if (s.length() < 2)  return 0;
 		if (s.front() != '"' || s.back() != '"')  return 0;
 		if (r)  *r = s.substr(1, s.length()-2);
 		return 1;
 	}
-	int is_identifier(const string& s) {
+	int is_identifier(const string& s) const {
 		if (s.length() == 0)  return 0;
 		if (!isalpha(s[0]) && s[0] != '_')  return 0;
 		for (int i=1; i<s.length(); i++)
 			if (!isalnum(s[i]) && s[i] != '_')  return 0;
 		return 1;
 	}
-	int is_comment(const string& s) {
+	int is_comment(const string& s) const {
 		return s.length() && s[0] == '#';
 	}
+
 };
 
 
@@ -338,6 +373,9 @@ int main() {
 	printf("hello world\n");
 	InterBasic bas;
 	bas.load("test.bas");
+	printf("-----\n");
 	//bas.showlines();
 	bas.runlines();
+	printf("-----\n");
+	bas.showenv();
 }

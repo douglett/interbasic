@@ -19,15 +19,16 @@ end if
 
 call f: a, b
 
+# test string splitting
 print "splitting"
-call split: "hello   world"
-let blah = _ret
-call len: blah
-let blah_len = _ret
-print "len", blah_len
-let r1 = blah[0]
-print "r1", r1
-#print "[" blah[0] "] [" blah[1] "]"
+call split: "  hello   world string "
+let words = _ret
+call len: words
+let words_len = _ret
+print "len", words_len
+call at: words, 1
+let w1 = _ret
+print "word 1"; w1
 
 print "the end"
 unlet d  # will be undefined if it exists, otherwise ok
