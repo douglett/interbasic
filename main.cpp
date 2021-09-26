@@ -35,22 +35,9 @@ struct Var {
 	int32_t i;
 	//_Float32 f;
 	string s;
-	vector<Var> arr;
-	map<string, Var> obj;
+	//vector<Var> arr;
+	//map<string, Var> obj;
 };
-
-
-//struct TokList_ {
-//	vector<string> tok;
-//	int line, pos;
-//
-//	string& at(int i) {
-//		if (i < 0 || i >= tok.size())
-//			throw IBError("token out of range: " + to_string(i), line);
-//		return tok[i];
-//	}
-//};
-//typedef  vector<string>  TokList;
 
 
 string join(const vector<string>& vs, const string& glue=", ") {
@@ -65,8 +52,11 @@ struct InterBasic {
 	struct frame { int lno; map<string, Var> vars; };
 	vector<string> lines, tok;
 	int lno = 0, pos = 0;
-	map<string, Var> vars;
-	vector<frame> callstack;
+
+	map<string, Var>          vars;
+	vector<frame>             callstack;
+	vector<vector<Var>>       heap_arrays;
+	vector<map<string, Var>>  heap_objects;
 
 
 	int load(const string& fname) {
@@ -245,7 +235,7 @@ struct InterBasic {
 	}
 
 
-	// runtime helpers
+ 	// runtime helpers
 	Var& get_def(const string& id) {
 		if (callstack.size() && callstack.back().vars.count(id))  return callstack.back().vars[id];
 		if (vars.count(id))  return vars.at(id);
@@ -281,7 +271,7 @@ struct InterBasic {
 			auto& v = get_def("_arg1");
 			auto& r = vars["_ret"] = { VAR_INTEGER, 0 };
 			if      (v.type == VAR_STRING)  r.i = v.s.length();
-			else if (v.type == VAR_ARRAY)   r.i = v.arr.size();
+			else if (v.type == VAR_ARRAY)   r.i = heap_arrays.at(v.i).size();
 			else    throw IBError("expected array or string", lno);
 		}
 		// array position
@@ -289,12 +279,20 @@ struct InterBasic {
 			auto& v = get_def("_arg1");
 			auto& p = get_def("_arg2");
 			if (v.type != VAR_ARRAY || p.type != VAR_INTEGER)  throw IBError("expected array, integer", lno);
-			if (p.i < 0 || p.i >= v.arr.size())  throw IBError("index out of range: "+to_string(p.i), lno);
-			vars["_ret"] = v.arr.at(p.i);
+			//if (p.i < 0 || p.i >= v.arr.size())  throw IBError("index out of range: "+to_string(p.i), lno);
+			//vars["_ret"] = v.arr.at(p.i);
+			vars["_ret"] = heap_arrays.at(v.i).at(p.i);
+
 		}
 		// make object
 		else if (id == "make") {
-			vars["_ret"] = { VAR_OBJECT };
+			heap_objects.push_back({});
+			vars["_ret"] = { VAR_OBJECT, .i=(int)heap_objects.size()-1 };
+		}
+		// make array
+		else if (id == "makearray") {
+			heap_arrays.push_back({});
+			vars["_ret"] = { VAR_ARRAY,  .i=(int)heap_arrays.size()-1 };
 		}
 		// set object property
 		else if (id == "setprop") {
@@ -303,23 +301,24 @@ struct InterBasic {
 			auto& v = get_def("_arg3");
 			if (o.type != VAR_OBJECT || p.type != VAR_STRING || v.type == VAR_NULL)
 				throw IBError("expected object, string, var", lno);
-			o.obj[p.s] = v;
-			vars["_ret"] = o;  // hacky... possibly need references
-			//printf(">> %d\n", (int)o.obj.size());
+			auto& obj = heap_objects.at(o.i);
+			obj[p.s] = v;
+			//vars["_ret"] = v;  // return assugned property (pointless?)
 		}
 		// split string by whitespace
 		else if (id == "split") {
 			string s;
 			auto& v = get_def("_arg1");
-			auto& r = vars["_ret"] = { VAR_ARRAY };
+			sysfunc("makearray");
+			auto& r = vars["_ret"];
 			if (v.type != VAR_STRING)  throw IBError("expected string", lno);
 			for (auto c : v.s)
 				if (isspace(c)) {
-					if (s.size()) r.arr.push_back({ VAR_STRING, .s=s });
+					if (s.size())  heap_arrays.at(r.i).push_back({ VAR_STRING, .s=s });
 					s = "";
 				}
 				else  s += c;
-			if (s.size()) r.arr.push_back({ VAR_STRING, .s=s });
+			if (s.size())  heap_arrays.at(r.i).push_back({ VAR_STRING, .s=s });
 		}
 		else  return 0;
 		return 1;
@@ -340,8 +339,8 @@ struct InterBasic {
 		case VAR_NULL:     return "null";
 		case VAR_INTEGER:  return std::to_string(v.i);
 		case VAR_STRING:   return v.s;
-		case VAR_ARRAY:    return "array:"+to_string(v.arr.size());
-		case VAR_OBJECT:   return "object:"+to_string(v.obj.size());
+		case VAR_ARRAY:    return "array:" + to_string( heap_arrays .at(v.i).size() );
+		case VAR_OBJECT:   return "object:"+ to_string( heap_objects.at(v.i).size() );
 		}
 		throw IBError();
 	}
