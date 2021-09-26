@@ -26,7 +26,7 @@ enum VAR_TYPE {
 	//VAR_FLOAT,
 	VAR_STRING,
 	VAR_ARRAY,
-	//VAR_OBJECT,
+	VAR_OBJECT,
 };
 
 
@@ -36,7 +36,7 @@ struct Var {
 	//_Float32 f;
 	string s;
 	vector<Var> arr;
-	//map<string, Var> obj;
+	map<string, Var> obj;
 };
 
 
@@ -194,7 +194,6 @@ struct InterBasic {
 		}
 		else if (cmd == "function")  lno = find_line({ "end", "function" }, lno);  // skip function block
 		else if (cmd == "die")       lno = lines.size();  // jump to end, and so halt
-		//else if (cmd == "return")    unstack();
 		else if (cmd == "return") {
 			if (callstack.size() == 0)  throw IBError("'return' outside of call");
 			lno = callstack.back().lno,  callstack.pop_back();
@@ -202,7 +201,6 @@ struct InterBasic {
 		else if (cmd == "end") {
 			auto &block_type = tok.at(1);
 			if      (block_type == "if")        ; // ignore for now
-			//else if (block_type == "function")  unstack();
 			else if (block_type == "function") {
 				if (callstack.size() == 0)  throw IBError("'end function' outside of call");
 				lno = callstack.back().lno,  callstack.pop_back();
@@ -242,7 +240,6 @@ struct InterBasic {
 		return v;
 	}
 	Var expr_atom() {
-		//printf("here\n");
 		if    (is_identifier(tok_peek()))  return get_def(tok_get());
 		else  return to_var(tok_get());
 	}
@@ -277,15 +274,6 @@ struct InterBasic {
 		throw IBError("find_end: no matching 'end " + type + "'", start);
 	}
 
-//	int unstack() {
-//		if (callstack.size() == 0)  throw IBError("can't return from function", lno);
-//		lno = callstack.back().lno;
-//		//auto& parent_vars = callstack.size() > 1 ? callstack[callstack.size()-2].vars : vars;
-//		//parent_vars["_ret"] = callstack.back().vars["_ret"];
-//		callstack.pop_back();
-//		return 0;
-//	}
-
 	// runtime system functions
 	int sysfunc(const string& id) {
 		// array or string length
@@ -303,6 +291,21 @@ struct InterBasic {
 			if (v.type != VAR_ARRAY || p.type != VAR_INTEGER)  throw IBError("expected array, integer", lno);
 			if (p.i < 0 || p.i >= v.arr.size())  throw IBError("index out of range: "+to_string(p.i), lno);
 			vars["_ret"] = v.arr.at(p.i);
+		}
+		// make object
+		else if (id == "make") {
+			vars["_ret"] = { VAR_OBJECT };
+		}
+		// set object property
+		else if (id == "setprop") {
+			auto& o = get_def("_arg1");
+			auto& p = get_def("_arg2");
+			auto& v = get_def("_arg3");
+			if (o.type != VAR_OBJECT || p.type != VAR_STRING || v.type == VAR_NULL)
+				throw IBError("expected object, string, var", lno);
+			o.obj[p.s] = v;
+			vars["_ret"] = o;  // hacky... possibly need references
+			//printf(">> %d\n", (int)o.obj.size());
 		}
 		// split string by whitespace
 		else if (id == "split") {
@@ -338,6 +341,7 @@ struct InterBasic {
 		case VAR_INTEGER:  return std::to_string(v.i);
 		case VAR_STRING:   return v.s;
 		case VAR_ARRAY:    return "array:"+to_string(v.arr.size());
+		case VAR_OBJECT:   return "object:"+to_string(v.obj.size());
 		}
 		throw IBError();
 	}

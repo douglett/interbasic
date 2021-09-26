@@ -23,12 +23,20 @@ call f: a, b
 print "splitting"
 call split: "  hello   world string "
 let words = _ret
+# number of splits
 call len: words
 let words_len = _ret
 print "len", words_len
+# 2nd item in list
 call at: words, 1
 let w1 = _ret
 print "word 1"; w1
+
+# object properties
+call make
+let myobj = _ret
+call setprop: myobj, "prop1", 1
+let myobj = _ret
 
 print "the end"
 unlet d  # will be undefined if it exists, otherwise ok
