@@ -3,49 +3,10 @@
 #include <vector>
 #include <fstream>
 #include <map>
+#include "helpers.hpp"
 
 using namespace std;
 
-
-struct IBError : std::exception {
-	string msg, error_string;
-	int lno;
-	IBError(const string& _msg="", int _lno=-1) : msg(_msg), lno(_lno) {
-		error_string = (msg.length() ? msg : "InterBasic runtime exception")
-			+ (lno >= 0 ? ", line " + to_string(lno+1) : "");
-	}
-	virtual const char* what() const noexcept {
-		return error_string.c_str();
-	}
-};
-
-
-enum VAR_TYPE {
-	VAR_NULL=0,
-	VAR_INTEGER,
-	//VAR_FLOAT,
-	VAR_STRING,
-	VAR_ARRAY,
-	VAR_OBJECT,
-};
-
-
-struct Var {
-	VAR_TYPE type;
-	int32_t i;
-	//_Float32 f;
-	string s;
-	//vector<Var> arr;
-	//map<string, Var> obj;
-};
-
-
-string join(const vector<string>& vs, const string& glue=", ") {
-	string s;
-	for (int i=0; i<vs.size(); i++)
-		s += (i==0 ? "" : glue) + vs[i];
-	return s;
-}
 
 
 struct InterBasic {
@@ -282,7 +243,6 @@ struct InterBasic {
 			//if (p.i < 0 || p.i >= v.arr.size())  throw IBError("index out of range: "+to_string(p.i), lno);
 			//vars["_ret"] = v.arr.at(p.i);
 			vars["_ret"] = heap_arrays.at(v.i).at(p.i);
-
 		}
 		// make object
 		else if (id == "make") {
@@ -324,9 +284,7 @@ struct InterBasic {
 		return 1;
 	}
 
-
-
-	// type conversion
+	// type conversion (uses state)
 	Var to_var(const string& s) const {
 		Var v = { VAR_NULL };
 		if      (s == "null")          return v;
@@ -343,30 +301,6 @@ struct InterBasic {
 		case VAR_OBJECT:   return "object:"+ to_string( heap_objects.at(v.i).size() );
 		}
 		throw IBError();
-	}
-	// type identification
-	int is_integer(const string& s, int *r=NULL) const {
-		if (s.length() == 0)  return 0;
-		for (int i=0; i<s.length(); i++)
-			if (!isdigit(s[i]))  return 0;
-		if (r)  *r = stoi(s);
-		return 1;
-	}
-	int is_literal(const string& s, string *r=NULL) const {
-		if (s.length() < 2)  return 0;
-		if (s.front() != '"' || s.back() != '"')  return 0;
-		if (r)  *r = s.substr(1, s.length()-2);
-		return 1;
-	}
-	int is_identifier(const string& s) const {
-		if (s.length() == 0)  return 0;
-		if (!isalpha(s[0]) && s[0] != '_')  return 0;
-		for (int i=1; i<s.length(); i++)
-			if (!isalnum(s[i]) && s[i] != '_')  return 0;
-		return 1;
-	}
-	int is_comment(const string& s) const {
-		return s.length() && s[0] == '#';
 	}
 
 };

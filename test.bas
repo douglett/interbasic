@@ -36,7 +36,7 @@ print "word 1"; w1
 call make
 let myobj = _ret
 call setprop: myobj, "prop1", 1
-let myobj = _ret
+#let myobj = _ret
 
 print "the end"
 unlet d  # will be undefined if it exists, otherwise ok
