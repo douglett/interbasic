@@ -96,10 +96,9 @@ struct InterBasic {
 		else if (cmd == "let" || cmd == "local") {
 			if (cmd == "local" && callstack.size() == 0)  throw IBError("no local scope", lno);
 			auto& id = tok_get();
-			auto& eq = tok_get();
 			auto& vv = cmd == "local" ? callstack.back().vars : vars;
-			if (eq != "=")  throw IBError("missing =", lno);
-			vv[id] = expr();
+			if    (tok_peek() == "=")  tok_get(),  vv[id] = expr();
+			else  vv[id] = { VAR_INTEGER, .i=0 };
 		}
 		else if (cmd == "unlet" || cmd == "unlocal") {
 			if (cmd == "unlocal" && callstack.size() == 0)  throw IBError("no local scope", lno);
@@ -128,18 +127,27 @@ struct InterBasic {
 		}
 		else if (cmd == "call") {
 			auto& id   = tok_get();
+			Var*  res  = NULL;
 			int   argc = 0;
 			callstack.push_back({ lno });  // new stack frame
-			//callstack.back().vars["_ret"] = { VAR_NULL }:
-			if (tok_peek() == ":") {  // args start
+			// get arguments
+			if (tok_peek() == ":") {
 				tok_get();
 				while (pos < tok.size())
 					if      (is_comment(tok_peek()))  tok_get();
+					else if (tok_peek() == ":")  break;
 					else if (tok_peek() == ",")  tok_get();
 					else    callstack.back().vars["_arg"+to_string(++argc)] = expr();
 			}
+			// put result
+			if (tok_peek() == ":") {
+				tok_get();
+				res = &expr_varpath();
+			}
+			// do call
 			if    (sysfunc(id))  ;  // run system function, if possible
 			else  lno = find_line({ "function", id }, 0);  // jump to function block definition
+			if    (res)  *res = get_def("_ret");
 		}
 		else if (cmd == "function")  lno = find_line({ "end", "function" }, lno);  // skip function block
 		else if (cmd == "die")       lno = lines.size();  // jump to end, and so halt
@@ -196,29 +204,29 @@ struct InterBasic {
 		if (is_identifier(tok_peek()))  return expr_varpath();
 		return to_var(tok_get());
 	}
-	Var expr_varpath() {
-		//if (!is_identifier(tok_peek()))  goto _err;
+	Var& expr_varpath() {
 		auto& id = tok_get();
-		Var   v  = get_def(id);  // first item in chain
+		//Var*  v  = NULL;
+		//if (!is_identifier(tok_peek()))  goto _err;
+		//v = &get_def(id);  // first item in chain
+		Var*  v  = &get_def(id);  // first item in chain
 		// parse chain
 		while (pos < tok.size())
 			if (tok_peek() == ".") {  // object property
-				if (v.type != VAR_OBJECT)  goto _err;
 				tok_get();
 				auto& id2 = tok_get();
-				if (!is_identifier(id2))  goto _err;
-				//printf(">>>  %s  %d  %s\n", id.c_str(), v.i, id2.c_str() );
-				v = heap_objects.at(v.i).at(id2);
+				if (!is_identifier(id2) || v->type != VAR_OBJECT)  goto _err;
+				v = &heap_objects.at(v->i).at(id2);
 			}
 			else if (tok_peek() == "[") {  // array offset
 				tok_get();
 				auto idx = expr();
 				if (tok_get() != "]" || idx.type != VAR_INTEGER)  goto _err;
-				v = heap_arrays.at(v.i).at(idx.i);
+				v = &heap_arrays.at(v->i).at(idx.i);
 			}
 			else  break;
 		// end varpath parse
-		return v;
+		return *v;
 		_err:
 		throw IBError("expr_varpath", lno);
 	}
@@ -241,8 +249,9 @@ struct InterBasic {
 
  	// runtime helpers
 	Var& get_def(const string& id) {
-		if (callstack.size() && callstack.back().vars.count(id))  return callstack.back().vars[id];
-		if (vars.count(id))  return vars.at(id);
+		if      (!is_identifier(id))  ;
+		else if (callstack.size() && callstack.back().vars.count(id))  return callstack.back().vars[id];
+		else if (vars.count(id))  return vars.at(id);
 		throw IBError("undefined variable: "+id);
 	}
 	int find_line(const vector<string>& pattern, int start) const {

@@ -21,8 +21,9 @@ call f: a, b
 
 # test string splitting
 print "splitting"
-call split: "  hello   world string "
-let words = _ret
+let words
+call split: "  hello   world string ": words
+#let words = _ret
 # number of splits
 call len: words
 let words_len = _ret
