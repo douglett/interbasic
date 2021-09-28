@@ -20,6 +20,7 @@ struct InterBasic {
 	vector<map<string, Var>>  heap_objects;
 
 
+	// initialisation
 	int load(const string& fname) {
 		fstream fs(fname, ios::in);
 		if (!fs.is_open())
@@ -109,15 +110,12 @@ struct InterBasic {
 		// print command
 		else if (cmd == "print") {
 			string s;
-			int ii = 0;
-			for (int i=1; i<tok.size(); i++) {
-				auto &t = tok.at(i);
-				if      (t == ",")            printf(" ");   // space seperator
-				else if (t == ";")            printf("\t");  // tab seperator
-				else if (is_literal(t, &s))   printf("%s", s.c_str() );
-				else if (is_integer(t, &ii))  printf("%d", ii );
-				else if (is_identifier(t))    printf("%s", stringify(get_def(t)).c_str() );
-				//else if (is_identifier(t))    printf("%s", stringify(expr()) );
+			while (pos < tok.size()) {
+				auto& t = tok_peek();
+				if      (t == ",")            printf(" "),   tok_get();  // space seperator
+				else if (t == ";")            printf("\t"),  tok_get();  // tab seperator
+				else if (is_literal(t, &s))   printf("%s", s.c_str() ),  tok_get();
+				else if (is_identifier(t) || is_integer(t))  printf("%s", stringify(expr()).c_str() );
 				else    throw IBError("print error: ["+t+"]", lno);
 			}
 			printf("\n");
@@ -174,12 +172,14 @@ struct InterBasic {
 
 
 	// expression parsing
+	//   (kinda messy)
 	Var expr() {
 		Var  v = expr_atom();
 		auto p = tok_peek();
 		if (p=="=" || p=="!") {
 			string cmp = tok_get() + (tok_peek() == "=" ? tok_get() : "");
-			Var q = expr_atom(), r = { VAR_INTEGER };
+			Var q = expr_atom();
+			Var r = { VAR_INTEGER };
 			if (v.type != VAR_INTEGER || q.type != VAR_INTEGER)  goto _err;
 			if      (cmp == "==")  r.i = v.i == q.i;
 			else if (cmp == "!=")  r.i = v.i != q.i;
@@ -191,10 +191,53 @@ struct InterBasic {
 		return v;
 	}
 	Var expr_atom() {
-		if    (is_identifier(tok_peek()))  return get_def(tok_get());
-		else  return to_var(tok_get());
+		//if (is_identifier(tok_peek()) && tok_peek(1) == "(")  return expr_call();
+		//if (is_identifier(tok_peek()))  return get_def(tok_get());
+		if (is_identifier(tok_peek()))  return expr_varpath();
+		return to_var(tok_get());
+	}
+	Var expr_varpath() {
+		//if (!is_identifier(tok_peek()))  goto _err;
+		auto& id = tok_get();
+		Var   v  = get_def(id);  // first item in chain
+		// parse chain
+		while (pos < tok.size())
+			if (tok_peek() == ".") {  // object property
+				if (v.type != VAR_OBJECT)  goto _err;
+				tok_get();
+				auto& id2 = tok_get();
+				if (!is_identifier(id2))  goto _err;
+				//printf(">>>  %s  %d  %s\n", id.c_str(), v.i, id2.c_str() );
+				v = heap_objects.at(v.i).at(id2);
+			}
+			else if (tok_peek() == "[") {  // array offset
+				tok_get();
+				auto idx = expr();
+				if (tok_get() != "]" || idx.type != VAR_INTEGER)  goto _err;
+				v = heap_arrays.at(v.i).at(idx.i);
+			}
+			else  break;
+		// end varpath parse
+		return v;
+		_err:
+		throw IBError("expr_varpath", lno);
 	}
 
+	// call in expression
+	// TODO: can have side effects, might fuck things
+//	Var expr_call() {
+//		auto& id = tok_get();
+//		auto& cstart = tok_get();
+//		if (!is_identifier(id) || !(cstart == "(" || cstart == ":"))  throw IBError();
+//
+//		while (pos < tok.size())
+//			if      (tok_peek() == ")")  break;
+//			else if (tok_peek() == ",")  ;
+//			else    expr();
+//
+//		//auto& cend = tok_get();
+//		//if (cend != ")")  throw IBError();
+//	}
 
  	// runtime helpers
 	Var& get_def(const string& id) {
@@ -224,6 +267,23 @@ struct InterBasic {
 		}
 		throw IBError("find_end: no matching 'end " + type + "'", start);
 	}
+	Var to_var(const string& s) const {
+		Var v = { VAR_NULL };
+		if      (s == "null")          return v;
+		else if (is_integer(s, &v.i))  return v.type=VAR_INTEGER, v;
+		else if (is_literal(s, &v.s))  return v.type=VAR_STRING, v;
+		throw IBError("expected Var, got ["+s+"]", lno);
+	}
+	string stringify(const Var& v) const {
+		switch (v.type) {
+		case VAR_NULL:     return "null";
+		case VAR_INTEGER:  return std::to_string(v.i);
+		case VAR_STRING:   return v.s;
+		case VAR_ARRAY:    return "array:" + to_string( heap_arrays .at(v.i).size() );
+		case VAR_OBJECT:   return "object:"+ to_string( heap_objects.at(v.i).size() );
+		}
+		throw IBError();
+	}
 
 	// runtime system functions
 	int sysfunc(const string& id) {
@@ -240,8 +300,6 @@ struct InterBasic {
 			auto& v = get_def("_arg1");
 			auto& p = get_def("_arg2");
 			if (v.type != VAR_ARRAY || p.type != VAR_INTEGER)  throw IBError("expected array, integer", lno);
-			//if (p.i < 0 || p.i >= v.arr.size())  throw IBError("index out of range: "+to_string(p.i), lno);
-			//vars["_ret"] = v.arr.at(p.i);
 			vars["_ret"] = heap_arrays.at(v.i).at(p.i);
 		}
 		// make object
@@ -282,25 +340,6 @@ struct InterBasic {
 		}
 		else  return 0;
 		return 1;
-	}
-
-	// type conversion (uses state)
-	Var to_var(const string& s) const {
-		Var v = { VAR_NULL };
-		if      (s == "null")          return v;
-		else if (is_integer(s, &v.i))  return v.type=VAR_INTEGER, v;
-		else if (is_literal(s, &v.s))  return v.type=VAR_STRING, v;
-		throw IBError("expected Var, got ["+s+"]", lno);
-	}
-	string stringify(const Var& v) const {
-		switch (v.type) {
-		case VAR_NULL:     return "null";
-		case VAR_INTEGER:  return std::to_string(v.i);
-		case VAR_STRING:   return v.s;
-		case VAR_ARRAY:    return "array:" + to_string( heap_arrays .at(v.i).size() );
-		case VAR_OBJECT:   return "object:"+ to_string( heap_objects.at(v.i).size() );
-		}
-		throw IBError();
 	}
 
 };

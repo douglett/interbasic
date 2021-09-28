@@ -31,12 +31,15 @@ print "len", words_len
 call at: words, 1
 let w1 = _ret
 print "word 1"; w1
+# testing short arrays
+print "words[1]", words[1]
 
 # object properties
 call make
 let myobj = _ret
-call setprop: myobj, "prop1", 1
-#let myobj = _ret
+call setprop: myobj, "prop1", 1000
+# testing short properties
+print "myobj.prop1 is", myobj.prop1
 
 print "the end"
 unlet d  # will be undefined if it exists, otherwise ok
