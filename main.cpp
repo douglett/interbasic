@@ -9,6 +9,114 @@ using namespace std;
 
 
 
+struct Input {
+	vector<string> lines, tok;
+	int lno = -1, pos = 0;
+
+	
+	// loading files
+	int load(const string& fname) {
+		// reset
+		lines = tok = {};
+		lno = -1, pos = 0;
+		// load
+		fstream fs(fname, ios::in);
+		if (!fs.is_open())
+			return fprintf(stderr, "error loading file %s\n", fname.c_str()), 1;
+		string s;
+		while (getline(fs, s))
+			lines.push_back(s);
+		printf("loaded file: %s (%d)\n", fname.c_str(), (int)lines.size());
+		// if (lines.size())  tok = tokenize(lines[lno]);  // load first line into tok
+		nextline();  // load first line into tok
+		return 0;
+	}
+
+
+	// convert line string to token
+	static vector<string> tokenize(const string& line) {
+		vector<string> vs;
+		string s;
+		for (int i=0; i<line.length(); i++) {
+			char c = line[i];
+			if      (isspace(c))  s = s.length() ? (vs.push_back(s), "") : "";
+			else if (isalnum(c) || c == '_')  s += c;
+			else if (c == '"') {
+				s = s.length() ? (vs.push_back(s), "") : "";
+				s += c;
+				for (++i; i<line.length(); i++) {
+					s += line[i];
+					if (line[i] == '"')  break;
+				}
+			}
+			else if (c == '#') {
+				s = s.length() ? (vs.push_back(s), "") : "";
+				vs.push_back(line.substr(i));
+				break;
+			}
+			else {
+				s = s.length() ? (vs.push_back(s), "") : "";
+				vs.push_back(string() + c);
+			}
+		}
+		if (s.length())  vs.push_back(s);
+		return vs;
+	}
+
+
+	// state display
+	void showlines() const {
+		for (int i=0; i<lines.size(); i++)
+			showtokens( tokenize(lines[i]), i );
+	}
+	void showtokens(const vector<string>& tok, int lno=0) const {
+		printf("%02d  ::  ", lno+1);
+		for (auto &t : tok)
+			printf("[%s]  ", t.c_str());
+		printf("\n");
+	}
+
+
+	// token based parsing
+	int eol() const {
+		return pos >= tok.size();
+	}
+	int eof() const {
+		return lno >= lines.size();
+	}
+	const string& peek(int ahead=0) const {
+		static const string& blank = "";
+		return pos+ahead >= tok.size() ? blank : tok[pos+ahead];
+	}
+	const string& get() {
+		if (pos >= tok.size())  throw IBError("expected token", lno);
+		return tok[pos++];
+	}
+	int expect(const string& s) {
+		if (get() == s)  return 1;
+		throw IBError("expected token '"+s+"'", lno);
+	}
+	int expecttype(const string& type) {
+		string s;
+		return expecttype(type, s);
+	}
+	int expecttype(const string& type, string& s) {
+		if      (type == "endl")        { if (peek() == "" || is_comment(s = get()))  return 1; }
+		else if (type == "integer")     { if (is_integer(s = get()))  return 1; }
+		else if (type == "literal")     { if (is_literal(s = get()))  return 1; }
+		else if (type == "identifier")  { if (is_identifier(s = get()))  return 1; }
+		throw IBError("expected token of type "+type, lno);
+	}
+	int nextline() {
+		lno++, pos = 0;
+		if (lno < lines.size())
+			return tok = tokenize(lines[lno]), 1;
+		return 0;
+	}
+};
+
+
+
 struct InterBasic {
 	struct frame { int lno; map<string, Var> vars; };
 	vector<string> lines, tok;
@@ -77,6 +185,18 @@ struct InterBasic {
 		printf("env :: \n");
 		for (auto& v : vars)
 			printf("	%s : %s\n", v.first.c_str(), stringify(v.second).c_str() );
+	}
+
+
+	// token parsing
+	//int    tok_eol () const { return pos >= tok.size() || is_comment(tok[pos]); }
+	const string& tok_peek(int ahead=0) const {
+		static const string& blank = "";
+		return pos+ahead >= tok.size() ? blank : tok[pos+ahead];
+	}
+	const string& tok_get () {
+		if (pos >= tok.size())  throw IBError("expected token", lno);
+		return tok[pos++];
 	}
 
 
@@ -167,18 +287,6 @@ struct InterBasic {
 	}
 
 
-	// token parsing
-	//int    tok_eol () const { return pos >= tok.size() || is_comment(tok[pos]); }
-	const string& tok_peek(int ahead=0) const {
-		static const string& blank = "";
-		return pos+ahead >= tok.size() ? blank : tok[pos+ahead];
-	}
-	const string& tok_get () {
-		if (pos >= tok.size())  throw IBError("expected token", lno);
-		return tok[pos++];
-	}
-
-
 	// expression parsing
 	//   (kinda messy)
 	Var expr() {
@@ -206,9 +314,6 @@ struct InterBasic {
 	}
 	Var& expr_varpath() {
 		auto& id = tok_get();
-		//Var*  v  = NULL;
-		//if (!is_identifier(tok_peek()))  goto _err;
-		//v = &get_def(id);  // first item in chain
 		Var*  v  = &get_def(id);  // first item in chain
 		// parse chain
 		while (pos < tok.size())
@@ -230,7 +335,6 @@ struct InterBasic {
 		_err:
 		throw IBError("expr_varpath", lno);
 	}
-
 	// call in expression
 	// TODO: can have side effects, might fuck things
 //	Var expr_call() {
@@ -246,6 +350,8 @@ struct InterBasic {
 //		//auto& cend = tok_get();
 //		//if (cend != ")")  throw IBError();
 //	}
+
+
 
  	// runtime helpers
 	Var& get_def(const string& id) {
@@ -294,6 +400,8 @@ struct InterBasic {
 		throw IBError();
 	}
 
+
+
 	// runtime system functions
 	int sysfunc(const string& id) {
 		// array or string length
@@ -341,11 +449,11 @@ struct InterBasic {
 			if (v.type != VAR_STRING)  throw IBError("expected string", lno);
 			for (auto c : v.s)
 				if (isspace(c)) {
-					if (s.size())  heap_arrays.at(r.i).push_back({ VAR_STRING, .s=s });
+					if (s.size())  heap_arrays.at(r.i).push_back({ VAR_STRING, .i=0, .s=s });
 					s = "";
 				}
 				else  s += c;
-			if (s.size())  heap_arrays.at(r.i).push_back({ VAR_STRING, .s=s });
+			if (s.size())  heap_arrays.at(r.i).push_back({ VAR_STRING, .i=0, .s=s });
 		}
 		else  return 0;
 		return 1;

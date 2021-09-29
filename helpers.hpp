@@ -40,7 +40,7 @@ struct IBError : std::exception {
 
 
 
-// string manip
+// string manipulation
 string join(const vector<string>& vs, const string& glue=", ") {
 	string s;
 	for (int i=0; i<vs.size(); i++)
