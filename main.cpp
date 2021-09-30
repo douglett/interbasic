@@ -101,7 +101,8 @@ struct Input {
 		return expecttype(type, s);
 	}
 	int expecttype(const string& type, string& s) {
-		if      (type == "endl")        { if (peek() == "" || is_comment(s = get()))  return 1; }
+		printf(">> [%s]\n", peek().c_str());
+		if      (type == "eol")         { if (peek() == "" || is_comment(s = get()))  return 1; }
 		else if (type == "integer")     { if (is_integer(s = get()))  return 1; }
 		else if (type == "literal")     { if (is_literal(s = get()))  return 1; }
 		else if (type == "identifier")  { if (is_identifier(s = get()))  return 1; }
@@ -165,11 +166,13 @@ struct InterBasic {
 			auto& vv = cmd == "local" ? callstack.back().vars : vars;
 			if    (inp.peek() == "=")  inp.get(),  vv[id] = expr();
 			else  vv[id] = { VAR_INTEGER, .i=0 };
+			inp.expecttype("eol");
 		}
 		else if (cmd == "unlet" || cmd == "unlocal") {
 			if (cmd == "unlocal" && callstack.size() == 0)  throw IBError("no local scope", lno);
 			auto& id = inp.get();
 			auto& vv = cmd == "unlocal" ? callstack.back().vars : vars;
+			inp.expecttype("eol");
 			if (vv.count(id))  vv.erase(id);  // can unlet missing vars, for simplicity
 		}
 		// print command
@@ -188,6 +191,7 @@ struct InterBasic {
 		// ... various
 		else if (cmd == "if") {
 			auto v = expr();
+			inp.expecttype("eol");
 			if (v.type != VAR_INTEGER)  throw IBError("expected integer");
 			if (v.i == 0)               inp.lno = find_end("if", lno+1);  // find matching end-if
 		}
@@ -210,19 +214,21 @@ struct InterBasic {
 				inp.get();
 				res = &expr_varpath();
 			}
+			inp.expecttype("eol");  // endline
 			// do call
 			if    (sysfunc(id))  ;  // run system function, if possible
 			else  inp.lno = find_line({ "function", id }, 0);  // jump to function block definition
 			if    (res)  *res = get_def("_ret");
 		}
 		else if (cmd == "function")  inp.lno = find_line({ "end", "function" }, lno);  // skip function block
-		else if (cmd == "die")       inp.lno = inp.lines.size();  // jump to end, and so halt
-		else if (cmd == "return") {
+		else if (cmd == "die" && inp.expecttype("eol"))       inp.lno = inp.lines.size();  // jump to end, and so halt
+		else if (cmd == "return" && inp.expecttype("eol")) {
 			if (callstack.size() == 0)  throw IBError("'return' outside of call", lno);
 			inp.lno = callstack.back().lno,  callstack.pop_back();
 		}
 		else if (cmd == "end") {
 			auto &block_type = inp.get();
+			inp.expecttype("eol");
 			if      (block_type == "if")        ; // ignore for now
 			else if (block_type == "function") {
 				if (callstack.size() == 0)  throw IBError("'end function' outside of call", lno);
