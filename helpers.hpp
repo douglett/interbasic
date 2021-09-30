@@ -5,7 +5,6 @@
 using namespace std;
 
 
-
 enum VAR_TYPE {
 	VAR_NULL=0,
 	VAR_INTEGER,
