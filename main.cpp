@@ -69,7 +69,7 @@ struct Input {
 		for (int i=0; i<lines.size(); i++)
 			showtokens( tokenize(lines[i]), i );
 	}
-	void showtokens(const vector<string>& tok, int lno=0) const {
+	static void showtokens(const vector<string>& tok, int lno=0) {
 		printf("%02d  ::  ", lno+1);
 		for (auto &t : tok)
 			printf("[%s]  ", t.c_str());
@@ -101,7 +101,6 @@ struct Input {
 		return expecttype(type, s);
 	}
 	int expecttype(const string& type, string& s) {
-		printf(">> [%s]\n", peek().c_str());
 		if      (type == "eol")         { if (peek() == "" || is_comment(s = get()))  return 1; }
 		else if (type == "integer")     { if (is_integer(s = get()))  return 1; }
 		else if (type == "literal")     { if (is_literal(s = get()))  return 1; }
@@ -155,7 +154,7 @@ struct InterBasic {
 	
 	void runline() {
 		lno = inp.lno;
-		inp.showtokens(inp.tok, inp.lno);
+		// inp.showtokens(inp.tok, inp.lno);
 		auto& cmd = inp.eol() ? inp.peek() : inp.get();
 		if      (cmd == "")         ;  // empty line
 		else if (is_comment(cmd))   ;  // empty line (with comment)
