@@ -109,18 +109,26 @@ struct Input {
 	}
 	int nextline() {
 		lno++, pos = 0;
-		if (lno < lines.size())
-			return tok = tokenize(lines[lno]), 1;
+		if (lno >= 0 && lno < lines.size())
+			return tok = tokenize(lines.at(lno)), 1;
 		return 0;
 	}
+	// int jump(int line) {
+	// 	lno = line, pos = 0;
+	// 	tok = tokenize(lines.at(lno));
+	// 	return 1;
+	// }
 };
 
 
 
 struct InterBasic {
+	Input inp;
+
 	struct frame { int lno; map<string, Var> vars; };
-	vector<string> lines, tok;
-	int lno = 0, pos = 0;
+	// vector<string> lines, tok;
+	// int lno = 0, pos = 0;
+	int lno = 0;
 
 	map<string, Var>          vars;
 	vector<frame>             callstack;
@@ -128,59 +136,7 @@ struct InterBasic {
 	vector<map<string, Var>>  heap_objects;
 
 
-	// initialisation
-	int load(const string& fname) {
-		fstream fs(fname, ios::in);
-		if (!fs.is_open())
-			return fprintf(stderr, "error loading file %s\n", fname.c_str()), 1;
-		string s;
-		while (getline(fs, s))
-			lines.push_back(s);
-		printf("loaded file: %s (%d)\n", fname.c_str(), (int)lines.size());
-		return 0;
-	}
-
-	vector<string> tokenize(const string& line) const {
-		vector<string> vs;
-		string s;
-		for (int i=0; i<line.length(); i++) {
-			char c = line[i];
-			if      (isspace(c))  s = s.length() ? (vs.push_back(s), "") : "";
-			else if (isalnum(c) || c == '_')  s += c;
-			else if (c == '"') {
-				s = s.length() ? (vs.push_back(s), "") : "";
-				s += c;
-				for (++i; i<line.length(); i++) {
-					s += line[i];
-					if (line[i] == '"')  break;
-				}
-			}
-			else if (c == '#') {
-				s = s.length() ? (vs.push_back(s), "") : "";
-				vs.push_back(line.substr(i));
-				break;
-			}
-			else {
-				s = s.length() ? (vs.push_back(s), "") : "";
-				vs.push_back(string() + c);
-			}
-		}
-		if (s.length())  vs.push_back(s);
-		return vs;
-	}
-
-
-	// display
-	void showlines() const {
-		for (int i=0; i<lines.size(); i++)
-			showtokens( tokenize(lines[i]), i );
-	}
-	void showtokens(const vector<string>& tok, int lno=0) const {
-		printf("%02d  ::  ", lno+1);
-		for (auto &t : tok)
-			printf("[%s]  ", t.c_str());
-		printf("\n");
-	}
+	// asd
 	void showenv() const {
 		printf("env :: \n");
 		for (auto& v : vars)
@@ -188,52 +144,42 @@ struct InterBasic {
 	}
 
 
-	// token parsing
-	//int    tok_eol () const { return pos >= tok.size() || is_comment(tok[pos]); }
-	const string& tok_peek(int ahead=0) const {
-		static const string& blank = "";
-		return pos+ahead >= tok.size() ? blank : tok[pos+ahead];
-	}
-	const string& tok_get () {
-		if (pos >= tok.size())  throw IBError("expected token", lno);
-		return tok[pos++];
-	}
-
-
 	// runtime
 	void runlines() {
-		for (lno=0; lno<lines.size(); lno++)
-			runline(lines[lno]);
+		while (!inp.eof()) {
+			runline();
+			inp.nextline();
+		}
 	}
-	void runline(const string& line) {
-		tok = tokenize(line);
-		//showtokens(tok, lno);
-		auto cmd = tok.size() ? tok.at(0) : "";
-		pos = 1;
+	
+	void runline() {
+		lno = inp.lno;
+		inp.showtokens(inp.tok, inp.lno);
+		auto& cmd = inp.eol() ? inp.peek() : inp.get();
 		if      (cmd == "")         ;  // empty line
 		else if (is_comment(cmd))   ;  // empty line (with comment)
 		// dim / undim
 		else if (cmd == "let" || cmd == "local") {
 			if (cmd == "local" && callstack.size() == 0)  throw IBError("no local scope", lno);
-			auto& id = tok_get();
+			auto& id = inp.get();
 			auto& vv = cmd == "local" ? callstack.back().vars : vars;
-			if    (tok_peek() == "=")  tok_get(),  vv[id] = expr();
+			if    (inp.peek() == "=")  inp.get(),  vv[id] = expr();
 			else  vv[id] = { VAR_INTEGER, .i=0 };
 		}
 		else if (cmd == "unlet" || cmd == "unlocal") {
 			if (cmd == "unlocal" && callstack.size() == 0)  throw IBError("no local scope", lno);
-			auto& id = tok.at(1);
+			auto& id = inp.get();
 			auto& vv = cmd == "unlocal" ? callstack.back().vars : vars;
 			if (vv.count(id))  vv.erase(id);  // can unlet missing vars, for simplicity
 		}
 		// print command
 		else if (cmd == "print") {
 			string s;
-			while (pos < tok.size()) {
-				auto& t = tok_peek();
-				if      (t == ",")            printf(" "),   tok_get();  // space seperator
-				else if (t == ";")            printf("\t"),  tok_get();  // tab seperator
-				else if (is_literal(t, &s))   printf("%s", s.c_str() ),  tok_get();
+			while (!inp.eol()) {
+				auto& t = inp.peek();
+				if      (t == ",")            printf(" "),   inp.get();  // space seperator
+				else if (t == ";")            printf("\t"),  inp.get();  // tab seperator
+				else if (is_literal(t, &s))   printf("%s", s.c_str() ),  inp.get();
 				else if (is_identifier(t) || is_integer(t))  printf("%s", stringify(expr()).c_str() );
 				else    throw IBError("print error: ["+t+"]", lno);
 			}
@@ -243,44 +189,44 @@ struct InterBasic {
 		else if (cmd == "if") {
 			auto v = expr();
 			if (v.type != VAR_INTEGER)  throw IBError("expected integer");
-			if (v.i == 0)               lno = find_end("if", lno+1);  // find matching end-if
+			if (v.i == 0)               inp.lno = find_end("if", lno+1);  // find matching end-if
 		}
 		else if (cmd == "call") {
-			auto& id   = tok_get();
+			auto& id   = inp.get();
 			Var*  res  = NULL;
 			int   argc = 0;
 			callstack.push_back({ lno });  // new stack frame
 			// get arguments
-			if (tok_peek() == ":") {
-				tok_get();
-				while (pos < tok.size())
-					if      (is_comment(tok_peek()))  tok_get();
-					else if (tok_peek() == ":")  break;
-					else if (tok_peek() == ",")  tok_get();
+			if (inp.peek() == ":") {
+				inp.get();
+				while (!inp.eol())
+					if      (is_comment(inp.peek()))  inp.get();
+					else if (inp.peek() == ":")  break;
+					else if (inp.peek() == ",")  inp.get();
 					else    callstack.back().vars["_arg"+to_string(++argc)] = expr();
 			}
 			// put result
-			if (tok_peek() == ":") {
-				tok_get();
+			if (inp.peek() == ":") {
+				inp.get();
 				res = &expr_varpath();
 			}
 			// do call
 			if    (sysfunc(id))  ;  // run system function, if possible
-			else  lno = find_line({ "function", id }, 0);  // jump to function block definition
+			else  inp.lno = find_line({ "function", id }, 0);  // jump to function block definition
 			if    (res)  *res = get_def("_ret");
 		}
-		else if (cmd == "function")  lno = find_line({ "end", "function" }, lno);  // skip function block
-		else if (cmd == "die")       lno = lines.size();  // jump to end, and so halt
+		else if (cmd == "function")  inp.lno = find_line({ "end", "function" }, lno);  // skip function block
+		else if (cmd == "die")       inp.lno = inp.lines.size();  // jump to end, and so halt
 		else if (cmd == "return") {
-			if (callstack.size() == 0)  throw IBError("'return' outside of call");
-			lno = callstack.back().lno,  callstack.pop_back();
+			if (callstack.size() == 0)  throw IBError("'return' outside of call", lno);
+			inp.lno = callstack.back().lno,  callstack.pop_back();
 		}
 		else if (cmd == "end") {
-			auto &block_type = tok.at(1);
+			auto &block_type = inp.get();
 			if      (block_type == "if")        ; // ignore for now
 			else if (block_type == "function") {
-				if (callstack.size() == 0)  throw IBError("'end function' outside of call");
-				lno = callstack.back().lno,  callstack.pop_back();
+				if (callstack.size() == 0)  throw IBError("'end function' outside of call", lno);
+				inp.lno = callstack.back().lno,  callstack.pop_back();
 			}
 		}
 		else    throw IBError("unknown command: " + cmd, lno);
@@ -291,9 +237,9 @@ struct InterBasic {
 	//   (kinda messy)
 	Var expr() {
 		Var  v = expr_atom();
-		auto p = tok_peek();
+		auto p = inp.peek();
 		if (p=="=" || p=="!") {
-			string cmp = tok_get() + (tok_peek() == "=" ? tok_get() : "");
+			string cmp = inp.get() + (inp.peek() == "=" ? inp.get() : "");
 			Var q = expr_atom();
 			Var r = { VAR_INTEGER };
 			if (v.type != VAR_INTEGER || q.type != VAR_INTEGER)  goto _err;
@@ -307,26 +253,26 @@ struct InterBasic {
 		return v;
 	}
 	Var expr_atom() {
-		//if (is_identifier(tok_peek()) && tok_peek(1) == "(")  return expr_call();
-		//if (is_identifier(tok_peek()))  return get_def(tok_get());
-		if (is_identifier(tok_peek()))  return expr_varpath();
-		return to_var(tok_get());
+		//if (is_identifier(inp.peek()) && inp.peek(1) == "(")  return expr_call();
+		//if (is_identifier(inp.peek()))  return get_def(inp.get());
+		if (is_identifier(inp.peek()))  return expr_varpath();
+		return to_var(inp.get());
 	}
 	Var& expr_varpath() {
-		auto& id = tok_get();
+		auto& id = inp.get();
 		Var*  v  = &get_def(id);  // first item in chain
 		// parse chain
-		while (pos < tok.size())
-			if (tok_peek() == ".") {  // object property
-				tok_get();
-				auto& id2 = tok_get();
+		while (!inp.eol())
+			if (inp.peek() == ".") {  // object property
+				inp.get();
+				auto& id2 = inp.get();
 				if (!is_identifier(id2) || v->type != VAR_OBJECT)  goto _err;
 				v = &heap_objects.at(v->i).at(id2);
 			}
-			else if (tok_peek() == "[") {  // array offset
-				tok_get();
+			else if (inp.peek() == "[") {  // array offset
+				inp.get();
 				auto idx = expr();
-				if (tok_get() != "]" || idx.type != VAR_INTEGER)  goto _err;
+				if (inp.get() != "]" || idx.type != VAR_INTEGER)  goto _err;
 				v = &heap_arrays.at(v->i).at(idx.i);
 			}
 			else  break;
@@ -338,16 +284,16 @@ struct InterBasic {
 	// call in expression
 	// TODO: can have side effects, might fuck things
 //	Var expr_call() {
-//		auto& id = tok_get();
-//		auto& cstart = tok_get();
+//		auto& id = inp.get();
+//		auto& cstart = inp.get();
 //		if (!is_identifier(id) || !(cstart == "(" || cstart == ":"))  throw IBError();
 //
 //		while (pos < tok.size())
-//			if      (tok_peek() == ")")  break;
-//			else if (tok_peek() == ",")  ;
+//			if      (inp.peek() == ")")  break;
+//			else if (inp.peek() == ",")  ;
 //			else    expr();
 //
-//		//auto& cend = tok_get();
+//		//auto& cend = inp.get();
 //		//if (cend != ")")  throw IBError();
 //	}
 
@@ -361,10 +307,10 @@ struct InterBasic {
 		throw IBError("undefined variable: "+id);
 	}
 	int find_line(const vector<string>& pattern, int start) const {
-		for (int i=start; i<lines.size(); i++) {
-			auto tok = tokenize(lines[i]);
+		for (int i = start; i < inp.lines.size(); i++) {
+			auto tok = inp.tokenize(inp.lines.at(i));
 			if (tok.size() < pattern.size())  continue;
-			for (int j=0; j<pattern.size(); j++)
+			for (int j = 0; j < pattern.size(); j++)
 				if (tok[j] != pattern[j])  goto _next;
 			return i;
 			_next:  ;
@@ -373,8 +319,8 @@ struct InterBasic {
 	}
 	int find_end(const string& type, int start) const {
 		int nest = 1;
-		for (int i=start; i<lines.size(); i++) {
-			auto tok = tokenize(lines[i]);
+		for (int i = start; i < inp.lines.size(); i++) {
+			auto tok = inp.tokenize(inp.lines.at(i));
 			if      (tok.size() < 2)  ;
 			else if (tok.at(0) == type)  nest++;
 			else if (tok.at(0) == "end" && tok.at(1) == type)  nest--;
@@ -465,7 +411,7 @@ struct InterBasic {
 int main() {
 	printf("hello world\n");
 	InterBasic bas;
-	bas.load("test.bas");
+	bas.inp.load("test.bas");
 	printf("-----\n");
 	//bas.showlines();
 	bas.runlines();
