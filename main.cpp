@@ -72,13 +72,25 @@ struct InterBasic {
 			}
 			printf("\n");
 		}
+		else if (cmd == "input") {
+			string s;
+			auto& v = expr_varpath();
+			printf("> ");
+			getline(cin, s);
+			v = { VAR_STRING, .i=0, .s=s };
+		}
 		// ... various
-		else if (cmd == "if") {
+		else if (cmd == "if" || cmd == "while") {
 			auto v = expr();
 			inp.expecttype("eol");
-			if (v.type != VAR_INTEGER)  throw IBError("expected integer");
-			if (v.i == 0)               inp.lno = find_end("if", lno+1);  // find matching end-if
+			if (v.type != VAR_INTEGER)  throw IBError("expected integer", lno);
+			// if (v.i == 0)               inp.lno = find_end("if", lno+1);  // find matching end-if
+			if (v.i == 0)               inp.lno = find_end(cmd, lno+1);  // find matching end-if / end-while
 		}
+		// else if (cmd == "while") {
+		// 	auto v = expr();
+		// 	inp.expecttype("eol");
+		// }
 		else if (cmd == "call") {
 			auto& id   = inp.get();
 			Var*  res  = NULL;
@@ -100,9 +112,10 @@ struct InterBasic {
 			}
 			inp.expecttype("eol");  // endline
 			// do call
-			if    (sysfunc(id))  ;  // run system function, if possible
+			if    (sysfunc(id))  callstack.pop_back();  // run system function, if possible, then dump local scope
 			else  inp.lno = find_line({ "function", id }, 0);  // jump to function block definition
-			if    (res)  *res = get_def("_ret");
+			// printf("%s <callstack>  %d  %d\n", id.c_str(), callstack.size(), callstack.back().lno);
+			if    (res)  *res = get_def("_ret");  // apply results
 		}
 		else if (cmd == "function")  inp.lno = find_line({ "end", "function" }, lno);  // skip function block
 		else if (cmd == "die" && inp.expecttype("eol"))       inp.lno = inp.lines.size();  // jump to end, and so halt
@@ -118,6 +131,10 @@ struct InterBasic {
 				if (callstack.size() == 0)  throw IBError("'end function' outside of call", lno);
 				inp.lno = callstack.back().lno,  callstack.pop_back();
 			}
+			else if (block_type == "while") {
+				throw IBError("reverse find on while required", lno);
+			}
+			else    throw IBError("unknown end: " + block_type, lno);
 		}
 		else    throw IBError("unknown command: " + cmd, lno);
 	}
@@ -129,7 +146,11 @@ struct InterBasic {
 		Var  v = expr_atom();
 		auto p = inp.peek();
 		if (p=="=" || p=="!") {
-			string cmp = inp.get() + (inp.peek() == "=" ? inp.get() : "");
+			// this fucks up on one line... why?
+			// string cmp = inp.get() + (inp.peek() == "=" ? inp.get() : "");
+			string cmp = inp.get();
+			cmp += (inp.peek() == "=" ? inp.get() : "");
+			// printf("asd [%s][%s]\n", cmp.c_str(), inp.peek().c_str());
 			Var q = expr_atom();
 			Var r = { VAR_INTEGER };
 			if (v.type != VAR_INTEGER || q.type != VAR_INTEGER)  goto _err;
@@ -146,7 +167,14 @@ struct InterBasic {
 		//if (is_identifier(inp.peek()) && inp.peek(1) == "(")  return expr_call();
 		//if (is_identifier(inp.peek()))  return get_def(inp.get());
 		if (is_identifier(inp.peek()))  return expr_varpath();
-		return to_var(inp.get());
+		return expr_var(inp.get());
+	}
+	Var expr_var(const string& s) const {
+		Var v = { VAR_NULL };
+		if      (s == "null")          return v;
+		else if (is_integer(s, &v.i))  return v.type=VAR_INTEGER, v;
+		else if (is_literal(s, &v.s))  return v.type=VAR_STRING, v;
+		throw IBError("expected Var, got ["+s+"]", lno);
 	}
 	Var& expr_varpath() {
 		auto& id = inp.get();
@@ -173,19 +201,19 @@ struct InterBasic {
 	}
 	// call in expression
 	// TODO: can have side effects, might fuck things
-//	Var expr_call() {
-//		auto& id = inp.get();
-//		auto& cstart = inp.get();
-//		if (!is_identifier(id) || !(cstart == "(" || cstart == ":"))  throw IBError();
-//
-//		while (pos < tok.size())
-//			if      (inp.peek() == ")")  break;
-//			else if (inp.peek() == ",")  ;
-//			else    expr();
-//
-//		//auto& cend = inp.get();
-//		//if (cend != ")")  throw IBError();
-//	}
+	// Var expr_call() {
+	// 	auto& id = inp.get();
+	// 	auto& cstart = inp.get();
+	// 	if (!is_identifier(id) || !(cstart == "(" || cstart == ":"))  throw IBError();
+
+	// 	while (pos < tok.size())
+	// 		if      (inp.peek() == ")")  break;
+	// 		else if (inp.peek() == ",")  ;
+	// 		else    expr();
+
+	// 	//auto& cend = inp.get();
+	// 	//if (cend != ")")  throw IBError();
+	// }
 
 
 
@@ -217,13 +245,6 @@ struct InterBasic {
 			if (nest == 0)  return i;
 		}
 		throw IBError("find_end: no matching 'end " + type + "'", start);
-	}
-	Var to_var(const string& s) const {
-		Var v = { VAR_NULL };
-		if      (s == "null")          return v;
-		else if (is_integer(s, &v.i))  return v.type=VAR_INTEGER, v;
-		else if (is_literal(s, &v.s))  return v.type=VAR_STRING, v;
-		throw IBError("expected Var, got ["+s+"]", lno);
 	}
 	string stringify(const Var& v) const {
 		switch (v.type) {
@@ -276,6 +297,13 @@ struct InterBasic {
 			obj[p.s] = v;
 			//vars["_ret"] = v;  // return assugned property (pointless?)
 		}
+		// string comparison
+		else if (id == "strcmp") {
+			const auto& a = get_def("_arg1");
+			const auto& b = get_def("_arg2");
+			if (a.type != VAR_STRING || b.type != VAR_STRING)  throw IBError("expected string, string", lno);
+			vars["_ret"] = { VAR_INTEGER, .i = a.s == b.s };
+		}
 		// split string by whitespace
 		else if (id == "split") {
 			string s;
@@ -292,6 +320,7 @@ struct InterBasic {
 			if (s.size())  heap_arrays.at(r.i).push_back({ VAR_STRING, .i=0, .s=s });
 		}
 		else  return 0;
+		// found
 		return 1;
 	}
 
@@ -301,7 +330,8 @@ struct InterBasic {
 int main() {
 	printf("hello world\n");
 	InterBasic bas;
-	bas.inp.load("test.bas");
+	// bas.inp.load("test.bas");
+	bas.inp.load("advent.bas");
 	printf("-----\n");
 	//bas.showlines();
 	bas.runlines();

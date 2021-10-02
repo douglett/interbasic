@@ -88,6 +88,8 @@ struct InputFile {
 	const string& get() {
 		if (pos >= tok.size())  throw IBError("expected token", lno);
 		return tok[pos++];
+		// pos++;
+		// return tok[pos-1];
 	}
 	int expect(const string& s) {
 		if (get() == s)  return 1;

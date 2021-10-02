@@ -7,10 +7,14 @@ Interpreted basic.
 
 TODO:
 -----
-- function calls in expressions
-- array subscripts in expressions
-- object properties in expressions
+- else / else-if
+- break while
+- while loops
+- function calls in expressions 
+	- actually, this will break the call stack so can't do this now
 
 DONE:
 -----
+- array subscripts in expressions
+- object properties in expressions
 - first item
