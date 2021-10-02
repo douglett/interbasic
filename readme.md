@@ -7,6 +7,7 @@ Interpreted basic.
 
 TODO:
 -----
+- codemap?
 - better handling of nesting
 - support for while nesting
 - else / else-if

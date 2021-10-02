@@ -15,9 +15,9 @@ function room1
 		call strcmp: cmd[0], "fart": cmp
 		if cmp
 			print "You farted."
-		end if
+		#end if
 		# check for not farting
-		if cmp != 1
+		else if cmp != 1
 			print "You did not fart."
 		end if
 		# check for quitting

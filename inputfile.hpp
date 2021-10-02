@@ -7,7 +7,13 @@ using namespace std;
 
 
 struct InputFile {
-	vector<string> lines, tok;
+	struct codemap_t {
+		string type;
+		int start, end;
+		vector<int> elselist;
+	};
+	vector<string>     lines, tok;
+	vector<codemap_t>  codemap;
 	int lno = -1, pos = 0;
 
 	
@@ -24,8 +30,8 @@ struct InputFile {
 		while (getline(fs, s))
 			lines.push_back(s);
 		printf("loaded file: %s (%d)\n", fname.c_str(), (int)lines.size());
-		// if (lines.size())  tok = tokenize(lines[lno]);  // load first line into tok
-		nextline();  // load first line into tok
+		createcodemap();  // make a map of all nested elements
+		lno = -1;  nextline();  // load first line into tok
 		return 0;
 	}
 
@@ -61,6 +67,45 @@ struct InputFile {
 	}
 
 
+	// create code map
+	void createcodemap() {
+		vector<int> nest;  // holds which nested blocks we are currently working on
+		lno = -1;  // reset pos
+		while (nextline()) {
+			auto& cmd = peek() == "" ? peek() : get();  // get line command
+			if (cmd == "if" || cmd == "while" || cmd == "function") {
+				codemap.push_back({ cmd, lno, -1 });
+				nest.push_back(codemap.size()-1);  // nest block
+			}
+			else if (cmd == "else") {
+				if (codemap.at(nest.at(nest.size()-1)).type != "if")  throw IBError("unexpected 'else' outside of if", lno);
+				codemap.at(nest.back()).elselist.push_back(lno);  // special case with if/else
+			}
+			else if (cmd == "end") {
+				auto& type = peek();  // get end if/while/function type
+				if (codemap.at(nest.at(nest.size()-1)).type != type)  throw IBError("unexpected 'end "+type+"'", lno);
+				codemap.at(nest.back()).end = lno;
+				nest.pop_back();  // un-nest
+			}
+		}
+		// show results
+		// for (const auto& m : codemap) {
+		// 	printf("%02d : %02d   %s\n", m.start+1, m.end+1, m.type.c_str());
+		// 	for (int e : m.elselist)
+		// 		printf("   %02d   else\n", e+1);
+		// }
+	}
+
+	const codemap_t& getcodemap(int line) const {
+		for (auto& c : codemap) {
+			if (c.start == line || c.end == line)  return c;
+			for (int e : c.elselist)
+				if (e == line)  return c;
+		}
+		throw IBError("getcodemap: no match for line "+to_string(line+1), lno);
+	}
+
+
 	// state display
 	void showlines() const {
 		for (int i=0; i<lines.size(); i++)
@@ -83,7 +128,7 @@ struct InputFile {
 	}
 	const string& peek(int ahead=0) const {
 		static const string& blank = "";
-		return pos+ahead >= tok.size() ? blank : tok[pos+ahead];
+		return pos+ahead < 0 || pos+ahead >= tok.size() ? blank : tok[pos+ahead];
 	}
 	const string& get() {
 		if (pos >= tok.size())  throw IBError("expected token", lno);
