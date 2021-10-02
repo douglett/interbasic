@@ -118,8 +118,10 @@ struct InterBasic {
 			if    (res)  *res = get_def("_ret");  // apply results
 		}
 		else if (cmd == "function")  inp.lno = find_line({ "end", "function" }, lno);  // skip function block
-		else if (cmd == "die" && inp.expecttype("eol"))       inp.lno = inp.lines.size();  // jump to end, and so halt
-		else if (cmd == "return" && inp.expecttype("eol")) {
+		else if (cmd == "die")       inp.expecttype("eol"),  inp.lno = inp.lines.size();  // jump to end, and so halt
+		else if (cmd == "break")     inp.expecttype("eol"),  inp.lno = find_line({ "end", "while" }, lno);  // jump to end of while block
+		else if (cmd == "return") {
+			inp.expecttype("eol");
 			if (callstack.size() == 0)  throw IBError("'return' outside of call", lno);
 			inp.lno = callstack.back().lno,  callstack.pop_back();
 		}
@@ -132,7 +134,9 @@ struct InterBasic {
 				inp.lno = callstack.back().lno,  callstack.pop_back();
 			}
 			else if (block_type == "while") {
-				throw IBError("reverse find on while required", lno);
+				// Warning: fucks up on nesting
+				inp.lno = find_line({ "while" }, lno, -1);
+				// throw IBError("reverse find on while required", lno);
 			}
 			else    throw IBError("unknown end: " + block_type, lno);
 		}
@@ -224,8 +228,9 @@ struct InterBasic {
 		else if (vars.count(id))  return vars.at(id);
 		throw IBError("undefined variable: "+id);
 	}
-	int find_line(const vector<string>& pattern, int start) const {
-		for (int i = start; i < inp.lines.size(); i++) {
+	int find_line(const vector<string>& pattern, int start, int direction=1) const {
+		int dir = direction < 0 ? -1 : +1;
+		for (int i = start; i >= 0 && i < inp.lines.size(); i += dir) {
 			auto tok = inp.tokenize(inp.lines.at(i));
 			if (tok.size() < pattern.size())  continue;
 			for (int j = 0; j < pattern.size(); j++)
