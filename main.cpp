@@ -87,7 +87,7 @@ struct InterBasic {
 			inp.expecttype("eol");
 			if (v.type != VAR_INTEGER)  throw IBError("expected integer", lno);
 			if (v.i == 0) {
-				if (condition.elselist.size())  inp.lno = condition.elselist.at(0)-1,  flag_elseif = 1;  // goto matching else
+				if (condition.inner.size())  inp.lno = condition.inner.at(0).pos-1,  flag_elseif = 1;  // goto matching else
 				else  inp.lno = condition.end;  // goto matching end-if
 			}
 		}
@@ -107,9 +107,9 @@ struct InterBasic {
 				}
 				else {
 					flag_elseif = 1;
-					for (int i = 0; i < condition.elselist.size(); i++)
-						if (condition.elselist[i] == lno) {
-							if    (i+1 < condition.elselist.size())  inp.lno = condition.elselist[i+1];
+					for (int i = 0; i < condition.inner.size(); i++)
+						if (condition.inner[i].pos == lno) {
+							if    (i+1 < condition.inner.size())  inp.lno = condition.inner[i+1].pos-1;
 							else  inp.lno = condition.end;
 						}
 				}

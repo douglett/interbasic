@@ -7,16 +7,16 @@ using namespace std;
 
 
 struct InputFile {
-	// struct codemap_inner_t {
-	// 	string type;
-	// 	int pos, top;
-	// };
+	struct codemap_inner_t {
+		string type;
+		int pos, top;
+	};
 	struct codemap_t {
 		string type;
 		int start, end;
 		string fname;
-		vector<int> elselist;
-		// vector<codemap_inner_t> inner;
+		// vector<int> elselist;
+		vector<codemap_inner_t> inner;
 	};
 	vector<string>     lines, tok;
 	vector<codemap_t>  codemap;
@@ -87,12 +87,15 @@ struct InputFile {
 				nest.push_back(codemap.size()-1);  // nest block
 			}
 			else if (cmd == "else") {
-				if (codemap.at(nest.at(nest.size()-1)).type != "if")  throw IBError("unexpected 'else' outside of if", lno);
-				codemap.at(nest.back()).elselist.push_back(lno);  // special case with if/else
+				if (nest.size() == 0 || codemap.at(nest.back()).type != "if")  throw IBError("unexpected 'else' outside of if", lno);
+				auto& cm = codemap.at(nest.back());
+				string type = peek() == "if" ? "else-if" : "else";
+				cm.inner.push_back({ type, lno, cm.start });
 			}
 			else if (cmd == "break") {
 				if (nest_while.size() == 0)  throw IBError("break outside of while", lno);
-				codemap.at(nest_while.back()).elselist.push_back(lno);
+				auto& cm = codemap.at(nest_while.back());
+				cm.inner.push_back({ "break", lno, cm.start });
 			}
 			else if (cmd == "end") {
 				auto& type = peek();  // get end if/while/function type
@@ -103,18 +106,18 @@ struct InputFile {
 			}
 		}
 		// show results
-		for (const auto& m : codemap) {
-			printf("%02d : %02d   %s  %s\n", m.start+1, m.end+1, m.type.c_str(), m.fname.c_str());
-			for (int e : m.elselist)
-				printf("   %02d   else\n", e+1);
+		for (const auto& c : codemap) {
+			printf("%02d : %02d   %s  %s\n", c.start+1, c.end+1, c.type.c_str(), c.fname.c_str());
+			for (auto& in : c.inner)
+				printf("   %02d   %s\n", in.pos, in.type.c_str());
 		}
 	}
 
 	const codemap_t& codemap_get(int line) const {
 		for (auto& c : codemap) {
 			if (c.start == line || c.end == line)  return c;
-			for (int e : c.elselist)
-				if (e == line)  return c;
+			for (auto& in : c.inner)
+				if (in.pos == line)  return c;
 		}
 		throw IBError("codemap_get: no match for line "+to_string(line+1), lno);
 	}
