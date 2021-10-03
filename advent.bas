@@ -2,7 +2,7 @@ call room1
 die
 
 
-function room1
+function room1_test
 	let inp
 	let cmd
 	let cmp_fart
@@ -25,5 +25,15 @@ function room1
 		else
 			print "You did not fart."
 		end if
+	end while
+end function
+
+
+function room1
+	let desc = "You are in a dark room."
+	let inp
+	while 1
+		print desc
+		input inp
 	end while
 end function

@@ -143,14 +143,24 @@ struct InterBasic {
 		else if (cmd == "function")  inp.lno = inp.codemap_getfunc(inp.peek()).end;  // skip function block
 		else if (cmd == "die")       inp.expecttype("eol"),  inp.lno = inp.lines.size();  // jump to end, and so halt
 		else if (cmd == "break")     inp.expecttype("eol"),  inp.lno = inp.codemap_get(lno).end;  // jump to end of while block
-		else if (cmd == "return")    inp.expecttype("eol"),  inp.lno = callstack.at(callstack.size()-1).lno,  callstack.pop_back();  // return from call
+		// else if (cmd == "return")    inp.expecttype("eol"),  inp.lno = callstack.at(callstack.size()-1).lno,  callstack.pop_back();  // return from call
+		else if (cmd == "return") {
+			vars["_ret"] = inp.eol() ? Var{ VAR_INTEGER, .i=0 } : expr();
+			inp.expecttype("eol");
+			if (callstack.size() == 0)  throw IBError("no local scope", lno);
+			inp.lno = callstack.back().lno,  callstack.pop_back();
+		}
 		// block end
 		else if (cmd == "end") {
 			auto &block_type = inp.get();
 			inp.expecttype("eol");
 			if      (block_type == "if")        flag_elseif = 0;  // make sure we are executing normally (probably unnecessary)
-			else if (block_type == "function")  inp.lno = callstack.at(callstack.size()-1).lno,  callstack.pop_back();
 			else if (block_type == "while")     inp.lno = inp.codemap_get(lno).start;
+			else if (block_type == "function") {
+				if (callstack.size() == 0)  throw IBError("no local scope", lno);
+				inp.lno = callstack.back().lno,  callstack.pop_back();
+				vars["_ret"] = { VAR_INTEGER, .i=0 };
+			}
 			else    throw IBError("unknown end: " + block_type, lno);
 		}
 		// unknown - error

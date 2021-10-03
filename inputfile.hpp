@@ -143,7 +143,8 @@ struct InputFile {
 
 	// token based parsing
 	int eol() const {
-		return pos >= tok.size();
+		// return pos >= tok.size();
+		return peek() == "" || is_comment(peek());
 	}
 	int eof() const {
 		return lno >= lines.size();
@@ -155,8 +156,6 @@ struct InputFile {
 	const string& get() {
 		if (pos >= tok.size())  throw IBError("expected token", lno);
 		return tok[pos++];
-		// pos++;
-		// return tok[pos-1];
 	}
 	int expect(const string& s) {
 		if (get() == s)  return 1;
@@ -167,7 +166,7 @@ struct InputFile {
 		return expecttype(type, s);
 	}
 	int expecttype(const string& type, string& s) {
-		if      (type == "eol")         { if (peek() == "" || is_comment(s = get()))  return 1; }
+		if      (type == "eol")         { if (eol())  return s = peek(), 1; }
 		else if (type == "integer")     { if (is_integer(s = get()))  return 1; }
 		else if (type == "literal")     { if (is_literal(s = get()))  return 1; }
 		else if (type == "identifier")  { if (is_identifier(s = get()))  return 1; }
