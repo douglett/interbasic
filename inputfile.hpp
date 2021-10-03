@@ -7,10 +7,16 @@ using namespace std;
 
 
 struct InputFile {
+	// struct codemap_inner_t {
+	// 	string type;
+	// 	int pos, top;
+	// };
 	struct codemap_t {
 		string type;
 		int start, end;
+		string fname;
 		vector<int> elselist;
+		// vector<codemap_inner_t> inner;
 	};
 	vector<string>     lines, tok;
 	vector<codemap_t>  codemap;
@@ -30,7 +36,7 @@ struct InputFile {
 		while (getline(fs, s))
 			lines.push_back(s);
 		printf("loaded file: %s (%d)\n", fname.c_str(), (int)lines.size());
-		createcodemap();  // make a map of all nested elements
+		codemap_build();  // make a map of all nested elements
 		lno = -1;  nextline();  // load first line into tok
 		return 0;
 	}
@@ -68,41 +74,54 @@ struct InputFile {
 
 
 	// create code map
-	void createcodemap() {
+	void codemap_build() {
 		vector<int> nest;  // holds which nested blocks we are currently working on
+		vector<int> nest_while;  // special nest for while command, to handle break statements
 		lno = -1;  // reset pos
 		while (nextline()) {
 			auto& cmd = peek() == "" ? peek() : get();  // get line command
 			if (cmd == "if" || cmd == "while" || cmd == "function") {
 				codemap.push_back({ cmd, lno, -1 });
+				if      (cmd == "function")  codemap.back().fname = get();
+				else if (cmd == "while")     nest_while.push_back(codemap.size()-1);  // nest while-block
 				nest.push_back(codemap.size()-1);  // nest block
 			}
 			else if (cmd == "else") {
 				if (codemap.at(nest.at(nest.size()-1)).type != "if")  throw IBError("unexpected 'else' outside of if", lno);
 				codemap.at(nest.back()).elselist.push_back(lno);  // special case with if/else
 			}
+			else if (cmd == "break") {
+				if (nest_while.size() == 0)  throw IBError("break outside of while", lno);
+				codemap.at(nest_while.back()).elselist.push_back(lno);
+			}
 			else if (cmd == "end") {
 				auto& type = peek();  // get end if/while/function type
 				if (codemap.at(nest.at(nest.size()-1)).type != type)  throw IBError("unexpected 'end "+type+"'", lno);
+				if (type == "while")  nest_while.pop_back();  // un-nest whiles
 				codemap.at(nest.back()).end = lno;
 				nest.pop_back();  // un-nest
 			}
 		}
 		// show results
-		// for (const auto& m : codemap) {
-		// 	printf("%02d : %02d   %s\n", m.start+1, m.end+1, m.type.c_str());
-		// 	for (int e : m.elselist)
-		// 		printf("   %02d   else\n", e+1);
-		// }
+		for (const auto& m : codemap) {
+			printf("%02d : %02d   %s  %s\n", m.start+1, m.end+1, m.type.c_str(), m.fname.c_str());
+			for (int e : m.elselist)
+				printf("   %02d   else\n", e+1);
+		}
 	}
 
-	const codemap_t& getcodemap(int line) const {
+	const codemap_t& codemap_get(int line) const {
 		for (auto& c : codemap) {
 			if (c.start == line || c.end == line)  return c;
 			for (int e : c.elselist)
 				if (e == line)  return c;
 		}
-		throw IBError("getcodemap: no match for line "+to_string(line+1), lno);
+		throw IBError("codemap_get: no match for line "+to_string(line+1), lno);
+	}
+	const codemap_t& codemap_getfunc(const string& fname) const {
+		for (auto& c : codemap)
+			if (c.type == "function" && c.fname == fname)  return c;
+		throw IBError("codemap_getfunc: function not found '"+fname+"'", lno);
 	}
 
 

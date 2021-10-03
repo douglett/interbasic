@@ -14,6 +14,7 @@ struct InterBasic {
 	// vector<string> lines, tok;
 	// int lno = 0, pos = 0;
 	int lno = 0;
+	int flag_elseif = 0;
 
 	map<string, Var>          vars;
 	vector<frame>             callstack;
@@ -59,7 +60,7 @@ struct InterBasic {
 			inp.expecttype("eol");
 			if (vv.count(id))  vv.erase(id);  // can unlet missing vars, for simplicity
 		}
-		// print command
+		// io text commands
 		else if (cmd == "print") {
 			string s;
 			while (!inp.eol()) {
@@ -79,18 +80,44 @@ struct InterBasic {
 			getline(cin, s);
 			v = { VAR_STRING, .i=0, .s=s };
 		}
-		// ... various
+		// conditionals
 		else if (cmd == "if" || cmd == "while") {
-			auto v = expr();
+			auto& condition = inp.codemap_get(lno);
+			auto  v         = expr();
 			inp.expecttype("eol");
 			if (v.type != VAR_INTEGER)  throw IBError("expected integer", lno);
-			// if (v.i == 0)               inp.lno = find_end("if", lno+1);  // find matching end-if
-			if (v.i == 0)               inp.lno = find_end(cmd, lno+1);  // find matching end-if / end-while
+			if (v.i == 0) {
+				if (condition.elselist.size())  inp.lno = condition.elselist.at(0)-1,  flag_elseif = 1;  // goto matching else
+				else  inp.lno = condition.end;  // goto matching end-if
+			}
 		}
-		// else if (cmd == "while") {
-		// 	auto v = expr();
-		// 	inp.expecttype("eol");
-		// }
+		else if (cmd == "else") {
+			auto& condition = inp.codemap_get(lno);
+			if      (!flag_elseif)  inp.lno = condition.end;  // not looking for elses - goto block end
+			else if (inp.peek() != "if")  inp.expecttype("eol");  // raw else - continue to next line
+			else {
+				inp.get();
+				auto v = expr();
+				inp.expecttype("eol");
+				if (v.type != VAR_INTEGER)  throw IBError("expected integer", lno);
+
+				// TODO: messy...
+				if (v.i) {
+					flag_elseif = 0;
+				}
+				else {
+					flag_elseif = 1;
+					for (int i = 0; i < condition.elselist.size(); i++)
+						if (condition.elselist[i] == lno) {
+							if    (i+1 < condition.elselist.size())  inp.lno = condition.elselist[i+1];
+							else  inp.lno = condition.end;
+						}
+				}
+				// /messy
+
+			}
+		}
+		// function call
 		else if (cmd == "call") {
 			auto& id   = inp.get();
 			Var*  res  = NULL;
@@ -113,33 +140,25 @@ struct InterBasic {
 			inp.expecttype("eol");  // endline
 			// do call
 			if    (sysfunc(id))  callstack.pop_back();  // run system function, if possible, then dump local scope
-			else  inp.lno = find_line({ "function", id }, 0);  // jump to function block definition
-			// printf("%s <callstack>  %d  %d\n", id.c_str(), callstack.size(), callstack.back().lno);
-			if    (res)  *res = get_def("_ret");  // apply results
+			else  inp.lno = inp.codemap_getfunc(id).start;
+			// apply results
+			if (res)  *res = get_def("_ret");
 		}
-		else if (cmd == "function")  inp.lno = find_line({ "end", "function" }, lno);  // skip function block
+		// various jumps
+		else if (cmd == "function")  inp.lno = inp.codemap_getfunc(inp.peek()).end;  // skip function block
 		else if (cmd == "die")       inp.expecttype("eol"),  inp.lno = inp.lines.size();  // jump to end, and so halt
-		else if (cmd == "break")     inp.expecttype("eol"),  inp.lno = find_line({ "end", "while" }, lno);  // jump to end of while block
-		else if (cmd == "return") {
-			inp.expecttype("eol");
-			if (callstack.size() == 0)  throw IBError("'return' outside of call", lno);
-			inp.lno = callstack.back().lno,  callstack.pop_back();
-		}
+		else if (cmd == "break")     inp.expecttype("eol"),  inp.lno = inp.codemap_get(lno).end;  // jump to end of while block
+		else if (cmd == "return")    inp.expecttype("eol"),  inp.lno = callstack.at(callstack.size()-1).lno,  callstack.pop_back();  // return from call
+		// block end
 		else if (cmd == "end") {
 			auto &block_type = inp.get();
 			inp.expecttype("eol");
-			if      (block_type == "if")        ; // ignore for now
-			else if (block_type == "function") {
-				if (callstack.size() == 0)  throw IBError("'end function' outside of call", lno);
-				inp.lno = callstack.back().lno,  callstack.pop_back();
-			}
-			else if (block_type == "while") {
-				// Warning: fucks up on nesting
-				inp.lno = find_line({ "while" }, lno, -1);
-				// throw IBError("reverse find on while required", lno);
-			}
+			if      (block_type == "if")        flag_elseif = 0;
+			else if (block_type == "function")  inp.lno = callstack.at(callstack.size()-1).lno,  callstack.pop_back();
+			else if (block_type == "while")     inp.lno = inp.codemap_get(lno).start;
 			else    throw IBError("unknown end: " + block_type, lno);
 		}
+		// unknown - error
 		else    throw IBError("unknown command: " + cmd, lno);
 	}
 
@@ -203,21 +222,6 @@ struct InterBasic {
 		_err:
 		throw IBError("expr_varpath", lno);
 	}
-	// call in expression
-	// TODO: can have side effects, might fuck things
-	// Var expr_call() {
-	// 	auto& id = inp.get();
-	// 	auto& cstart = inp.get();
-	// 	if (!is_identifier(id) || !(cstart == "(" || cstart == ":"))  throw IBError();
-
-	// 	while (pos < tok.size())
-	// 		if      (inp.peek() == ")")  break;
-	// 		else if (inp.peek() == ",")  ;
-	// 		else    expr();
-
-	// 	//auto& cend = inp.get();
-	// 	//if (cend != ")")  throw IBError();
-	// }
 
 
 
@@ -228,29 +232,29 @@ struct InterBasic {
 		else if (vars.count(id))  return vars.at(id);
 		throw IBError("undefined variable: "+id);
 	}
-	int find_line(const vector<string>& pattern, int start, int direction=1) const {
-		int dir = direction < 0 ? -1 : +1;
-		for (int i = start; i >= 0 && i < inp.lines.size(); i += dir) {
-			auto tok = inp.tokenize(inp.lines.at(i));
-			if (tok.size() < pattern.size())  continue;
-			for (int j = 0; j < pattern.size(); j++)
-				if (tok[j] != pattern[j])  goto _next;
-			return i;
-			_next:  ;
-		}
-		throw IBError("find_line: not found: " + join(pattern));
-	}
-	int find_end(const string& type, int start) const {
-		int nest = 1;
-		for (int i = start; i < inp.lines.size(); i++) {
-			auto tok = inp.tokenize(inp.lines.at(i));
-			if      (tok.size() < 2)  ;
-			else if (tok.at(0) == type)  nest++;
-			else if (tok.at(0) == "end" && tok.at(1) == type)  nest--;
-			if (nest == 0)  return i;
-		}
-		throw IBError("find_end: no matching 'end " + type + "'", start);
-	}
+	// int find_line(const vector<string>& pattern, int start, int direction=1) const {
+	// 	int dir = direction < 0 ? -1 : +1;
+	// 	for (int i = start; i >= 0 && i < inp.lines.size(); i += dir) {
+	// 		auto tok = inp.tokenize(inp.lines.at(i));
+	// 		if (tok.size() < pattern.size())  continue;
+	// 		for (int j = 0; j < pattern.size(); j++)
+	// 			if (tok[j] != pattern[j])  goto _next;
+	// 		return i;
+	// 		_next:  ;
+	// 	}
+	// 	throw IBError("find_line: not found: " + join(pattern));
+	// }
+	// int find_end(const string& type, int start) const {
+	// 	int nest = 1;
+	// 	for (int i = start; i < inp.lines.size(); i++) {
+	// 		auto tok = inp.tokenize(inp.lines.at(i));
+	// 		if      (tok.size() < 2)  ;
+	// 		else if (tok.at(0) == type)  nest++;
+	// 		else if (tok.at(0) == "end" && tok.at(1) == type)  nest--;
+	// 		if (nest == 0)  return i;
+	// 	}
+	// 	throw IBError("find_end: no matching 'end " + type + "'", start);
+	// }
 	string stringify(const Var& v) const {
 		switch (v.type) {
 		case VAR_NULL:     return "null";
