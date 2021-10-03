@@ -98,8 +98,8 @@ struct InputFile {
 				cm.inner.push_back({ "break", lno, cm.start });
 			}
 			else if (cmd == "end") {
-				auto& type = peek();  // get end if/while/function type
-				if (codemap.at(nest.at(nest.size()-1)).type != type)  throw IBError("unexpected 'end "+type+"'", lno);
+				auto& type = peek();
+				if (nest.size() == 0 || codemap.at(nest.back()).type != type)  throw IBError("unexpected 'end "+type+"'", lno);
 				if (type == "while")  nest_while.pop_back();  // un-nest whiles
 				codemap.at(nest.back()).end = lno;
 				nest.pop_back();  // un-nest

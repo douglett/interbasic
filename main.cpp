@@ -87,7 +87,7 @@ struct InterBasic {
 			inp.expecttype("eol");
 			if (v.type != VAR_INTEGER)  throw IBError("expected integer", lno);
 			if (v.i == 0) {
-				if (condition.inner.size())  inp.lno = condition.inner.at(0).pos-1,  flag_elseif = 1;  // goto matching else
+				if (condition.inner.size())  inp.lno = condition.inner.at(0).pos-1,  flag_elseif = 1;  // goto matching else, set execution to else-mode
 				else  inp.lno = condition.end;  // goto matching end-if
 			}
 		}
@@ -100,12 +100,9 @@ struct InterBasic {
 				auto v = expr();
 				inp.expecttype("eol");
 				if (v.type != VAR_INTEGER)  throw IBError("expected integer", lno);
-
-				// TODO: messy...
-				if (v.i) {
-					flag_elseif = 0;
-				}
-				else {
+				if (v.i)  flag_elseif = 0;  // continue normal execution
+				if (!v.i) {
+					// find next else, else-if, end-if
 					flag_elseif = 1;
 					for (int i = 0; i < condition.inner.size(); i++)
 						if (condition.inner[i].pos == lno) {
@@ -113,8 +110,6 @@ struct InterBasic {
 							else  inp.lno = condition.end;
 						}
 				}
-				// /messy
-
 			}
 		}
 		// function call
@@ -153,7 +148,7 @@ struct InterBasic {
 		else if (cmd == "end") {
 			auto &block_type = inp.get();
 			inp.expecttype("eol");
-			if      (block_type == "if")        flag_elseif = 0;
+			if      (block_type == "if")        flag_elseif = 0;  // make sure we are executing normally (probably unnecessary)
 			else if (block_type == "function")  inp.lno = callstack.at(callstack.size()-1).lno,  callstack.pop_back();
 			else if (block_type == "while")     inp.lno = inp.codemap_get(lno).start;
 			else    throw IBError("unknown end: " + block_type, lno);
