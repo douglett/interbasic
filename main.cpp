@@ -8,25 +8,30 @@ using namespace std;
 
 
 struct InterBasic {
-	InputFile inp;
+	struct StackFrame { int lno; map<string, Var> vars; };
+	struct HeapMemory { VAR_TYPE type; vector<Var> arr; map<string, Var> obj; };
 
-	struct frame { int lno; map<string, Var> vars; };
-	// vector<string> lines, tok;
-	// int lno = 0, pos = 0;
-	int lno = 0;
-	int flag_elseif = 0;
+	int      lno = 0;
+	int      flag_elseif = 0;
+	int32_t  heap_top = 0;
 
+	InputFile                 inp;
 	map<string, Var>          vars;
-	vector<frame>             callstack;
-	vector<vector<Var>>       heap_arrays;
-	vector<map<string, Var>>  heap_objects;
+	vector<StackFrame>        callstack;
+	map<int32_t, HeapMemory>  heap;
 
 
-	// asd
+	// debug - show current call stack
 	void showenv() const {
-		printf("env :: \n");
+		printf(":: env ::\n");
+		printf("   :global:\n");
 		for (auto& v : vars)
-			printf("	%s : %s\n", v.first.c_str(), stringify(v.second).c_str() );
+			printf("      %s : %s\n", v.first.c_str(), stringify(v.second).c_str() );
+		if (callstack.size()) {
+		printf("   :local:\n");
+			for (auto& v : callstack.back().vars)
+				printf("      %s : %s\n", v.first.c_str(), stringify(v.second).c_str() );
+		}
 	}
 
 
@@ -117,7 +122,7 @@ struct InterBasic {
 			auto& id   = inp.get();
 			Var*  res  = NULL;
 			int   argc = 0;
-			callstack.push_back({ lno });  // new stack frame
+			StackFrame frame = { lno };  // new stack frame
 			// get arguments
 			if (inp.peek() == ":") {
 				inp.get();
@@ -125,7 +130,7 @@ struct InterBasic {
 					if      (is_comment(inp.peek()))  inp.get();
 					else if (inp.peek() == ":")  break;
 					else if (inp.peek() == ",")  inp.get();
-					else    callstack.back().vars["_arg"+to_string(++argc)] = expr();
+					else    frame.vars["_arg"+to_string(++argc)] = expr();
 			}
 			// put result
 			if (inp.peek() == ":") {
@@ -133,7 +138,11 @@ struct InterBasic {
 				res = &expr_varpath();
 			}
 			inp.expecttype("eol");  // endline
+			// printf("callstack for %s:\n", id.c_str());
+			// for (auto v : frame.vars)
+			// 	printf("  %s  %s\n", v.first.c_str(), stringify(v.second).c_str());
 			// do call
+			callstack.push_back(frame);  // put new frame on callstack
 			if    (sysfunc(id))  callstack.pop_back();  // run system function, if possible, then dump local scope
 			else  inp.lno = inp.codemap_getfunc(id).start;
 			// apply results
@@ -171,6 +180,20 @@ struct InterBasic {
 	// expression parsing
 	//   (kinda messy)
 	Var expr() {
+		return expr_or();
+	}
+	Var expr_or() {
+		Var  v = expr_compare();
+		if (inp.peek() == "|" && inp.peek(1) == "|") {
+			inp.get(), inp.get();
+			Var q = expr_or();  // note: this shouldn't evaluate, but needs to for parsing reasons.
+			if (v.type != VAR_INTEGER || q.type != VAR_INTEGER)  throw IBError("bad comparison", lno);
+			// if (v.i)  return { VAR_INTEGER, .i=1 };
+			return { VAR_INTEGER, .i = (v.i || q.i) };
+		}
+		return v;
+	}
+	Var expr_compare() {
 		Var  v = expr_atom();
 		auto p = inp.peek();
 		if (p=="=" || p=="!") {
@@ -213,13 +236,13 @@ struct InterBasic {
 				inp.get();
 				auto& id2 = inp.get();
 				if (!is_identifier(id2) || v->type != VAR_OBJECT)  goto _err;
-				v = &heap_objects.at(v->i).at(id2);
+				v = &heap.at(v->i).obj.at(id2);
 			}
 			else if (inp.peek() == "[") {  // array offset
 				inp.get();
 				auto idx = expr();
 				if (inp.get() != "]" || idx.type != VAR_INTEGER)  goto _err;
-				v = &heap_arrays.at(v->i).at(idx.i);
+				v = &heap.at(v->i).arr.at(idx.i);
 			}
 			else  break;
 		// end varpath parse
@@ -265,8 +288,8 @@ struct InterBasic {
 		case VAR_NULL:     return "null";
 		case VAR_INTEGER:  return std::to_string(v.i);
 		case VAR_STRING:   return v.s;
-		case VAR_ARRAY:    return "array:" + to_string( heap_arrays .at(v.i).size() );
-		case VAR_OBJECT:   return "object:"+ to_string( heap_objects.at(v.i).size() );
+		case VAR_ARRAY:    return "array:" + to_string( heap.at(v.i).arr.size() );
+		case VAR_OBJECT:   return "object:"+ to_string( heap.at(v.i).obj.size() );
 		}
 		throw IBError();
 	}
@@ -280,7 +303,7 @@ struct InterBasic {
 			auto& v = get_def("_arg1");
 			auto& r = vars["_ret"] = { VAR_INTEGER, 0 };
 			if      (v.type == VAR_STRING)  r.i = v.s.length();
-			else if (v.type == VAR_ARRAY)   r.i = heap_arrays.at(v.i).size();
+			else if (v.type == VAR_ARRAY)   r.i = heap.at(v.i).arr.size();
 			else    throw IBError("expected array or string", lno);
 		}
 		// array position
@@ -288,17 +311,24 @@ struct InterBasic {
 			auto& v = get_def("_arg1");
 			auto& p = get_def("_arg2");
 			if (v.type != VAR_ARRAY || p.type != VAR_INTEGER)  throw IBError("expected array, integer", lno);
-			vars["_ret"] = heap_arrays.at(v.i).at(p.i);
+			vars["_ret"] = heap.at(v.i).arr.at(p.i);
 		}
 		// make object
-		else if (id == "make") {
-			heap_objects.push_back({});
-			vars["_ret"] = { VAR_OBJECT, .i=(int)heap_objects.size()-1 };
+		else if (id == "makeobj") {
+			heap[++heap_top] = { VAR_OBJECT };
+			vars["_ret"] = { VAR_OBJECT, .i=heap_top };
 		}
 		// make array
 		else if (id == "makearray") {
-			heap_arrays.push_back({});
-			vars["_ret"] = { VAR_ARRAY,  .i=(int)heap_arrays.size()-1 };
+			heap[++heap_top] = { VAR_ARRAY };
+			vars["_ret"] = { VAR_ARRAY, .i=heap_top };
+		}
+		// free memory
+		else if (id == "free") {
+			auto& v = get_def("_arg1");
+			if (v.type != VAR_ARRAY || v.type != VAR_OBJECT)  throw IBError("expected array / object", lno);
+			heap.erase(v.i);
+			vars["_ret"] = { VAR_INTEGER, .i=0 };
 		}
 		// set object property
 		else if (id == "setprop") {
@@ -307,9 +337,9 @@ struct InterBasic {
 			auto& v = get_def("_arg3");
 			if (o.type != VAR_OBJECT || p.type != VAR_STRING || v.type == VAR_NULL)
 				throw IBError("expected object, string, var", lno);
-			auto& obj = heap_objects.at(o.i);
+			auto& obj = heap.at(o.i).obj;
 			obj[p.s] = v;
-			//vars["_ret"] = v;  // return assugned property (pointless?)
+			vars["_ret"] = v;  // return assugned property
 		}
 		// string comparison
 		else if (id == "strcmp") {
@@ -324,14 +354,15 @@ struct InterBasic {
 			auto& v = get_def("_arg1");
 			sysfunc("makearray");
 			auto& r = vars["_ret"];
+			auto& arr = heap.at(r.i).arr;
 			if (v.type != VAR_STRING)  throw IBError("expected string", lno);
 			for (auto c : v.s)
 				if (isspace(c)) {
-					if (s.size())  heap_arrays.at(r.i).push_back({ VAR_STRING, .i=0, .s=s });
+					if (s.size())  arr.push_back({ VAR_STRING, .i=0, .s=s });
 					s = "";
 				}
 				else  s += c;
-			if (s.size())  heap_arrays.at(r.i).push_back({ VAR_STRING, .i=0, .s=s });
+			if (s.size())  arr.push_back({ VAR_STRING, .i=0, .s=s });
 		}
 		else  return 0;
 		// found
