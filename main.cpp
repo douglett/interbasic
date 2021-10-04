@@ -32,6 +32,7 @@ struct InterBasic {
 			for (auto& v : callstack.back().vars)
 				printf("      %s : %s\n", v.first.c_str(), stringify(v.second).c_str() );
 		}
+		printf("   :memsize: %02d\n", heap.size());
 	}
 
 
@@ -91,9 +92,13 @@ struct InterBasic {
 			auto  v         = expr();
 			inp.expecttype("eol");
 			if (v.type != VAR_INTEGER)  throw IBError("expected integer", lno);
-			if (v.i == 0) {
-				if (condition.inner.size())  inp.lno = condition.inner.at(0).pos-1,  flag_elseif = 1;  // goto matching else, set execution to else-mode
-				else  inp.lno = condition.end;  // goto matching end-if
+			if (cmd == "while") {
+				if (v.i == 0)  inp.lno = condition.end;
+			}
+			else if (cmd == "if") {
+				if      (v.i)  flag_elseif = 0;  // continue to next line
+				else if (v.i == 0 && condition.inner.size())  inp.lno = condition.inner.at(0).pos-1,  flag_elseif = 1;  // goto matching else, set execution to else-mode
+				else if (v.i == 0)  inp.lno = condition.end,  flag_elseif = 0;  // goto matching end-if
 			}
 		}
 		else if (cmd == "else") {
@@ -256,9 +261,9 @@ struct InterBasic {
  	// runtime helpers
 	Var& get_def(const string& id) {
 		if      (!is_identifier(id))  ;
-		else if (callstack.size() && callstack.back().vars.count(id))  return callstack.back().vars[id];
+		else if (callstack.size() && callstack.back().vars.count(id))  return callstack.back().vars.at(id);
 		else if (vars.count(id))  return vars.at(id);
-		throw IBError("undefined variable: "+id);
+		throw IBError("undefined variable: "+id, lno);
 	}
 	// int find_line(const vector<string>& pattern, int start, int direction=1) const {
 	// 	int dir = direction < 0 ? -1 : +1;
@@ -307,12 +312,12 @@ struct InterBasic {
 			else    throw IBError("expected array or string", lno);
 		}
 		// array position
-		else if (id == "at") {
-			auto& v = get_def("_arg1");
-			auto& p = get_def("_arg2");
-			if (v.type != VAR_ARRAY || p.type != VAR_INTEGER)  throw IBError("expected array, integer", lno);
-			vars["_ret"] = heap.at(v.i).arr.at(p.i);
-		}
+		// else if (id == "at") {
+		// 	auto& v = get_def("_arg1");
+		// 	auto& p = get_def("_arg2");
+		// 	if (v.type != VAR_ARRAY || p.type != VAR_INTEGER)  throw IBError("expected array, integer", lno);
+		// 	vars["_ret"] = heap.at(v.i).arr.at(p.i);
+		// }
 		// make object
 		else if (id == "makeobj") {
 			heap[++heap_top] = { VAR_OBJECT };
@@ -326,7 +331,7 @@ struct InterBasic {
 		// free memory
 		else if (id == "free") {
 			auto& v = get_def("_arg1");
-			if (v.type != VAR_ARRAY || v.type != VAR_OBJECT)  throw IBError("expected array / object", lno);
+			if (v.type != VAR_ARRAY && v.type != VAR_OBJECT)  throw IBError("expected array / object", lno);
 			heap.erase(v.i);
 			vars["_ret"] = { VAR_INTEGER, .i=0 };
 		}
