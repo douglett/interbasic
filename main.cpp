@@ -125,7 +125,7 @@ struct InterBasic {
 		// function call
 		else if (cmd == "call") {
 			auto& id   = inp.get();
-			Var*  res  = NULL;
+			// Var*  res  = NULL;
 			int   argc = 0;
 			StackFrame frame = { lno };  // new stack frame
 			// get arguments
@@ -139,8 +139,9 @@ struct InterBasic {
 			}
 			// put result
 			if (inp.peek() == ":") {
-				inp.get();
-				res = &expr_varpath();
+				// inp.get();
+				// res = &expr_varpath();
+				throw IBError("return paths in call deprecated (for now)", lno);
 			}
 			inp.expecttype("eol");  // endline
 			// printf("callstack for %s:\n", id.c_str());
@@ -151,7 +152,7 @@ struct InterBasic {
 			if    (sysfunc(id))  callstack.pop_back();  // run system function, if possible, then dump local scope
 			else  inp.lno = inp.codemap_getfunc(id).start;
 			// apply results
-			if (res)  *res = get_def("_ret");
+			// if (res)  *res = get_def("_ret");
 		}
 		// various jumps
 		else if (cmd == "function")  inp.lno = inp.codemap_getfunc(inp.peek()).end;  // skip function block
