@@ -381,8 +381,8 @@ struct InterBasic {
 int main() {
 	printf("hello world\n");
 	InterBasic bas;
-	// bas.inp.load("test.bas");
-	bas.inp.load("advent.bas");
+	// bas.inp.load("scripts/test.bas");
+	bas.inp.load("scripts/advent.bas");
 	printf("-----\n");
 	//bas.showlines();
 	bas.runlines();
