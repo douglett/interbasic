@@ -49,22 +49,31 @@ struct InterBasic {
 		// inp.showtokens(inp.tok, inp.lno);
 		auto& cmd = inp.eol() ? inp.peek() : inp.get();
 		if      (cmd == "")         ;  // empty line
-		else if (is_comment(cmd))   ;  // empty line (with comment)
+		else if (is_comment(cmd))   ;  // empty line (with comment)	
 		// dim / undim
-		else if (cmd == "let" || cmd == "local") {
-			if (cmd == "local" && callstack.size() == 0)  throw IBError("no local scope", lno);
+		else if (cmd == "dim") {
+			// get optional type here
 			auto& id = inp.get();
-			auto& vv = cmd == "local" ? callstack.back().vars : vars;
-			if    (inp.peek() == "=")  inp.get(),  vv[id] = expr();
-			else  vv[id] = { VAR_INTEGER, .i=0 };
+			auto& vv = callstack.size() ? callstack.back().vars : vars;
+			if      (vv.count(id))  throw IBError("redefinition of "+id, lno);
+			else if (inp.peek() == "=")  inp.get(),  vv[id] = expr();
+			else    vv[id] = { VAR_INTEGER, .i=0 };
 			inp.expecttype("eol");
 		}
-		else if (cmd == "unlet" || cmd == "unlocal") {
-			if (cmd == "unlocal" && callstack.size() == 0)  throw IBError("no local scope", lno);
+		else if (cmd == "undim") {
 			auto& id = inp.get();
-			auto& vv = cmd == "unlocal" ? callstack.back().vars : vars;
 			inp.expecttype("eol");
-			if (vv.count(id))  vv.erase(id);  // can unlet missing vars, for simplicity
+			if      (callstack.size() && callstack.back().vars.count(id))  callstack.back().vars.erase(id);
+			else if (vars.count(id))  vars.erase(id);
+		}
+		else if (cmd == "let") {
+			auto& var = expr_varpath();
+			inp.expect("=");
+			auto  val = expr();
+			inp.expecttype("eol");
+			// if (var.type == VAR_ARRAY || var.type == VAR_OBJECT || val.type == VAR_ARRAY || val.type == VAR_OBJECT)
+			// 	printf("warning: assigning to/from object or array (L%d)\n", lno);
+			var = val;
 		}
 		// io text commands
 		else if (cmd == "print") {

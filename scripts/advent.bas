@@ -1,4 +1,4 @@
-let current_room = "room1"
+dim current_room = "room1"
 
 call mainloop
 print "The end.", _ret
@@ -6,11 +6,13 @@ die
 
 
 function mainloop
+	dim cmp1
+	dim cmp2
 	while 1
 		call strcmp: current_room, "room1"
-		local cmp1 = _ret
+		let cmp1 = _ret
 		call strcmp: current_room, "room2"
-		local cmp2 = _ret
+		let cmp2 = _ret
 		if cmp1
 			call room1
 		else if cmp2
@@ -27,15 +29,15 @@ function mainloop
 end function
 
 function default_actions
-	local cmd = _arg1
-	#call split: _arg1: cmd
+	dim cmd = _arg1
+	# call split: _arg1: cmd
 	# command checking
 	call strcmp: cmd[0], "quit"
-	local cmp_quit = _ret
+	dim cmp_quit = _ret
 	call strcmp: cmd[0], "q"
-	local cmp_q = _ret
+	dim cmp_q = _ret
 	call strcmp: cmd[0], "fart"
-	local cmp_fart = _ret
+	dim cmp_fart = _ret
 	if cmp_quit || cmp_q
 		print "You quit!"
 		return 1000
@@ -46,13 +48,16 @@ function default_actions
 end function
 
 function room1
-	local inp
+	dim inp
+	dim cmd
+	dim cmp_east
+	dim cmp_e
 	while 1
 		print "You are in a dark room."
 		print "exits: east"
 		input inp
 		call split: inp
-		local cmd = _ret
+		let cmd = _ret
 		# all room actions
 		call default_actions: cmd
 		if _ret
@@ -60,9 +65,9 @@ function room1
 		end if
 		# room1 actions
 		call strcmp: cmd[0], "east"
-		local cmp_east = _ret
+		let cmp_east = _ret
 		call strcmp: cmd[0], "e"
-		local cmp_e = _ret
+		let cmp_e = _ret
 		if cmp_east || cmp_e
 			print "You walk east."
 			let current_room = "room2"
@@ -73,13 +78,16 @@ function room1
 end function
 
 function room2
-	local inp
+	dim inp
+	dim cmd
+	dim cmp_west
+	dim cmp_w
 	while 1
 		print "You are in a bright room."
 		print "exits: west"
 		input inp
 		call split: inp
-		local cmd = _ret
+		let cmd = _ret
 		# all room actions
 		call default_actions: cmd
 		if _ret
@@ -87,9 +95,9 @@ function room2
 		end if
 		# room2 actions
 		call strcmp: cmd[0], "west"
-		local cmp_west = _ret
+		let cmp_west = _ret
 		call strcmp: cmd[0], "w"
-		local cmp_w = _ret
+		let cmp_w = _ret
 		if cmp_west || cmp_w
 			print "You walk west."
 			let current_room = "room1"

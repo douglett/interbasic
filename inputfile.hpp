@@ -170,7 +170,7 @@ struct InputFile {
 		else if (type == "integer")     { if (is_integer(s = get()))  return 1; }
 		else if (type == "literal")     { if (is_literal(s = get()))  return 1; }
 		else if (type == "identifier")  { if (is_identifier(s = get()))  return 1; }
-		throw IBError("expected token of type "+type, lno);
+		throw IBError("expected token; expected ["+type+"], got ["+peek()+"]", lno);
 	}
 	int nextline() {
 		lno++, pos = 0;
