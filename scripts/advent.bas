@@ -6,8 +6,7 @@ die
 
 
 function mainloop
-	dim cmp1
-	dim cmp2
+	dim cmp1, cmp2
 	while 1
 		call strcmp: current_room, "room1"
 		let cmp1 = _ret
@@ -48,10 +47,7 @@ function default_actions
 end function
 
 function room1
-	dim inp
-	dim cmd
-	dim cmp_east
-	dim cmp_e
+	dim inp, cmd, cmp_east, cmp_e
 	while 1
 		print "You are in a dark room."
 		print "exits: east"
@@ -78,10 +74,7 @@ function room1
 end function
 
 function room2
-	dim inp
-	dim cmd
-	dim cmp_west
-	dim cmp_w
+	dim inp, cmd, cmp_west, cmp_w
 	while 1
 		print "You are in a bright room."
 		print "exits: west"

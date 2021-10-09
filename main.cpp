@@ -53,11 +53,15 @@ struct InterBasic {
 		// dim / undim
 		else if (cmd == "dim") {
 			// get optional type here
-			auto& id = inp.get();
 			auto& vv = callstack.size() ? callstack.back().vars : vars;
-			if      (vv.count(id))  throw IBError("redefinition of "+id, lno);
-			else if (inp.peek() == "=")  inp.get(),  vv[id] = expr();
-			else    vv[id] = { VAR_INTEGER, .i=0 };
+			while (!inp.eol()) {
+				auto& id = inp.get();
+				if      (vv.count(id))  throw IBError("redefinition of "+id, lno);
+				else if (inp.peek() == "=")  inp.get(),  vv[id] = expr();
+				else    vv[id] = { VAR_INTEGER, .i=0 };
+				if (inp.peek() != ",")  break;  // allow comma seperated dim list
+				inp.get();
+			}
 			inp.expecttype("eol");
 		}
 		else if (cmd == "undim") {
