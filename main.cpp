@@ -113,7 +113,7 @@ struct InterBasic {
 		else if (cmd == "else") {
 			auto& condition = inp.codemap_get(lno);
 			if      (!flag_elseif)  inp.lno = condition.end;  // not looking for elses - goto block end
-			else if (inp.peek() != "if")  inp.expecttype("eol");  // raw else - continue to next line
+			else if (inp.peek() != "if")  inp.expecttype("eol"),  flag_elseif = 0;  // raw else - continue to next line, and switch to normal execution
 			else {
 				inp.get();
 				auto v = expr();
@@ -122,7 +122,6 @@ struct InterBasic {
 				if (v.i)  flag_elseif = 0;  // continue normal execution
 				if (!v.i) {
 					// find next else, else-if, end-if
-					flag_elseif = 1;
 					for (int i = 0; i < condition.inner.size(); i++)
 						if (condition.inner[i].pos == lno) {
 							if    (i+1 < condition.inner.size())  inp.lno = condition.inner[i+1].pos-1;
@@ -178,7 +177,7 @@ struct InterBasic {
 		else if (cmd == "end") {
 			auto &block_type = inp.get();
 			inp.expecttype("eol");
-			if      (block_type == "if")        flag_elseif = 0;  // make sure we are executing normally (probably unnecessary)
+			if      (block_type == "if")        flag_elseif = 0;  // make sure we are executing normally
 			else if (block_type == "while")     inp.lno = inp.codemap_get(lno).start;
 			else if (block_type == "function") {
 				if (callstack.size() == 0)  throw IBError("no local scope", lno);
