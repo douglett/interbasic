@@ -233,16 +233,12 @@ struct InterBasic {
 		return v;
 	}
 	Var expr_atom() {
-		//if (is_identifier(inp.peek()) && inp.peek(1) == "(")  return expr_call();
-		//if (is_identifier(inp.peek()))  return get_def(inp.get());
-		if (is_identifier(inp.peek()))  return expr_varpath();
-		return expr_var(inp.get());
-	}
-	Var expr_var(const string& s) const {
 		Var v = { VAR_NULL };
-		if      (s == "null")          return v;
-		else if (is_integer(s, &v.i))  return v.type=VAR_INTEGER, v;
-		else if (is_literal(s, &v.s))  return v.type=VAR_STRING, v;
+		string s = inp.peek();
+		if      (s == "null")          return inp.get(), v;
+		else if (is_identifier(s))     return expr_varpath();
+		else if (is_integer(s, &v.i))  return inp.get(), v.type=VAR_INTEGER, v;
+		else if (is_literal(s, &v.s))  return inp.get(), v.type=VAR_STRING, v;
 		throw IBError("expected Var, got ["+s+"]", lno);
 	}
 	Var& expr_varpath() {
@@ -254,19 +250,21 @@ struct InterBasic {
 				inp.get();
 				auto& id2 = inp.get();
 				if (!is_identifier(id2) || v->type != VAR_OBJECT)  goto _err;
+				if (!heap.count(v->i) || !heap.at(v->i).obj.count(id2))  goto _err2;
 				v = &heap.at(v->i).obj.at(id2);
 			}
 			else if (inp.peek() == "[") {  // array offset
 				inp.get();
 				auto idx = expr();
 				if (inp.get() != "]" || idx.type != VAR_INTEGER)  goto _err;
+				if (!heap.count(v->i) || idx.i < 0 || idx.i >= heap.at(v->i).arr.size())  goto _err2;
 				v = &heap.at(v->i).arr.at(idx.i);
 			}
 			else  break;
 		// end varpath parse
 		return *v;
-		_err:
-		throw IBError("expr_varpath", lno);
+		_err:   throw IBError("expr_varpath", lno);
+		_err2:  throw IBError("index out of range", lno);
 	}
 
 
