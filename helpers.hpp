@@ -21,7 +21,16 @@ struct Var {
 	string s;
 	//vector<Var> arr;
 	//map<string, Var> obj;
+
+	static const Var VNULL;
+	static const Var ZERO;
+	static const Var ONE;
+	// static const Var FZERO;
 };
+
+const Var Var::VNULL = { VAR_NULL };
+const Var Var::ZERO  = { VAR_INTEGER, 0 };
+const Var Var::ONE   = { VAR_INTEGER, 1 };
 
 
 

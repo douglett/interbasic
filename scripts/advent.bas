@@ -1,5 +1,9 @@
 dim current_room = "room1"
 
+dim maf = 2+2-3
+print "quick maf", maf
+print "quick maf", 2+2-3
+
 call mainloop
 print "The end.", _ret
 die

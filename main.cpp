@@ -58,7 +58,7 @@ struct InterBasic {
 				auto& id = inp.get();
 				if      (vv.count(id))  throw IBError("redefinition of "+id, lno);
 				else if (inp.peek() == "=")  inp.get(),  vv[id] = expr();
-				else    vv[id] = { VAR_INTEGER, .i=0 };
+				else    vv[id] = Var::ZERO;
 				if (inp.peek() != ",")  break;  // allow comma seperated dim list
 				inp.get();
 			}
@@ -87,8 +87,9 @@ struct InterBasic {
 				if      (t == ",")            printf(" "),   inp.get();  // space seperator
 				else if (t == ";")            printf("\t"),  inp.get();  // tab seperator
 				else if (is_literal(t, &s))   printf("%s", s.c_str() ),  inp.get();
-				else if (is_identifier(t) || is_integer(t))  printf("%s", stringify(expr()).c_str() );
-				else    throw IBError("print error: ["+t+"]", lno);
+				// else if (is_identifier(t) || is_integer(t))  printf("%s", stringify(expr()).c_str() );
+				// else    throw IBError("print error: ["+t+"]", lno);
+				else    printf("%s", stringify(expr()).c_str() );
 			}
 			printf("\n");
 		}
@@ -172,7 +173,7 @@ struct InterBasic {
 		else if (cmd == "break")     inp.expecttype("eol"),  inp.lno = inp.codemap_get(lno).end;  // jump to end of while block
 		// else if (cmd == "return")    inp.expecttype("eol"),  inp.lno = callstack.at(callstack.size()-1).lno,  callstack.pop_back();  // return from call
 		else if (cmd == "return") {
-			vars["_ret"] = inp.eol() ? Var{ VAR_INTEGER, .i=0 } : expr();
+			vars["_ret"] = inp.eol() ? Var::ZERO : expr();
 			inp.expecttype("eol");
 			if (callstack.size() == 0)  throw IBError("no local scope", lno);
 			inp.lno = callstack.back().lno,  callstack.pop_back();
@@ -186,7 +187,7 @@ struct InterBasic {
 			else if (block_type == "function") {
 				if (callstack.size() == 0)  throw IBError("no local scope", lno);
 				inp.lno = callstack.back().lno,  callstack.pop_back();
-				vars["_ret"] = { VAR_INTEGER, .i=0 };
+				vars["_ret"] = Var::ZERO;
 			}
 			else    throw IBError("unknown end: " + block_type, lno);
 		}
@@ -196,44 +197,81 @@ struct InterBasic {
 
 
 	// expression parsing
-	//   (kinda messy)
+	int flag_expr_eval = 1;
 	Var expr() {
+		flag_expr_eval = 1;
 		return expr_or();
 	}
 	Var expr_or() {
 		Var  v = expr_compare();
 		if (inp.peek() == "|" && inp.peek(1) == "|") {
 			inp.get(), inp.get();
-			Var q = expr_or();  // note: this shouldn't evaluate, but needs to for parsing reasons.
-			if (v.type != VAR_INTEGER || q.type != VAR_INTEGER)  throw IBError("bad comparison", lno);
-			// if (v.i)  return { VAR_INTEGER, .i=1 };
-			return { VAR_INTEGER, .i = (v.i || q.i) };
+			if      (!flag_expr_eval)  return expr_or(), Var::VNULL;
+			else if (v.type != VAR_INTEGER)  goto _err;
+			else if (!v.i) {
+				Var q = expr_or();  // note: this should evaluate
+				if (q.type != VAR_INTEGER)  goto _err;
+				return { VAR_INTEGER, .i = !!q.i };
+			}
+			else {
+				flag_expr_eval = 0;
+				expr_or();  // note: this shouldn't evaluate, but needs to for parsing reasons.
+				flag_expr_eval = 1;
+				return Var::ONE;
+			}
+		}
+		return v;
+		_err:   throw IBError("expected integer", lno);
+	}
+	Var expr_compare() {
+		Var  v = expr_add();
+		auto cmp = inp.peek();
+		if (cmp=="=" || cmp=="!" || cmp==">" || cmp=="<") {
+			inp.get();
+			cmp += (inp.peek() == "=" ? inp.get() : "");  // note: odd C++ parsing error here
+			Var q = expr_add();
+			if      (!flag_expr_eval)  return Var::VNULL;
+			else if (v.type != VAR_INTEGER || q.type != VAR_INTEGER)  goto _err;
+			else if (cmp == "==")  return { VAR_INTEGER, .i = v.i == q.i };
+			else if (cmp == "!=")  return { VAR_INTEGER, .i = v.i != q.i };
+			else if (cmp == ">")   return { VAR_INTEGER, .i = v.i >  q.i };
+			else if (cmp == "<")   return { VAR_INTEGER, .i = v.i <  q.i };
+			else if (cmp == ">=")  return { VAR_INTEGER, .i = v.i >= q.i };
+			else if (cmp == "<=")  return { VAR_INTEGER, .i = v.i <= q.i };
+			// else    goto _err2;
+		}
+		return v;
+		_err:   throw IBError("expected integer", lno);
+		// _err2:  throw IBError("bad comparison", lno);
+	}
+	Var expr_add() {
+		Var  v = expr_mul();
+		auto op = inp.peek();
+		if (op=="+" || op=="-") {
+			inp.get();
+			Var q = expr_add();
+			if      (!flag_expr_eval)  return Var::VNULL;
+			else if (v.type != VAR_INTEGER || q.type != VAR_INTEGER)  throw IBError("expected integer", lno);
+			else if (op == "+")  return { VAR_INTEGER, .i = v.i + q.i };
+			else if (op == "-")  return { VAR_INTEGER, .i = v.i - q.i };
 		}
 		return v;
 	}
-	Var expr_compare() {
+	Var expr_mul() {
 		Var  v = expr_atom();
-		auto p = inp.peek();
-		if (p=="=" || p=="!") {
-			// this fucks up on one line... why?
-			// string cmp = inp.get() + (inp.peek() == "=" ? inp.get() : "");
-			string cmp = inp.get();
-			cmp += (inp.peek() == "=" ? inp.get() : "");
-			// printf("asd [%s][%s]\n", cmp.c_str(), inp.peek().c_str());
-			Var q = expr_atom();
-			Var r = { VAR_INTEGER };
-			if (v.type != VAR_INTEGER || q.type != VAR_INTEGER)  goto _err;
-			if      (cmp == "==")  r.i = v.i == q.i;
-			else if (cmp == "!=")  r.i = v.i != q.i;
-			else    goto _err;
-			return r;
-			_err:
-			throw IBError("bad comparison", lno);
+		auto op = inp.peek();
+		if (op=="*" || op=="/") {
+			inp.get();
+			Var q = expr_mul();
+			if      (!flag_expr_eval)  return Var::VNULL;
+			else if (v.type != VAR_INTEGER || q.type != VAR_INTEGER)  throw IBError("expected integer", lno);
+			else if (op == "*")  return { VAR_INTEGER, .i = v.i * q.i };
+			else if (op == "/")  return { VAR_INTEGER, .i = v.i / q.i };
 		}
 		return v;
 	}
 	Var expr_atom() {
-		Var v = { VAR_NULL };
+		Var v = Var::VNULL;
 		string s = inp.peek();
 		if      (s == "null")          return inp.get(), v;
 		else if (is_identifier(s))     return expr_varpath();
@@ -249,22 +287,27 @@ struct InterBasic {
 			if (inp.peek() == ".") {  // object property
 				inp.get();
 				auto& id2 = inp.get();
-				if (!is_identifier(id2) || v->type != VAR_OBJECT)  goto _err;
-				if (!heap.count(v->i) || !heap.at(v->i).obj.count(id2))  goto _err2;
+				if (!is_identifier(id2))  goto _err;
+				if (!flag_expr_eval)  continue;
+				if (v->type != VAR_OBJECT)  goto _err2;
+				if (!heap.count(v->i) || !heap.at(v->i).obj.count(id2))  goto _err3;
 				v = &heap.at(v->i).obj.at(id2);
 			}
 			else if (inp.peek() == "[") {  // array offset
 				inp.get();
 				auto idx = expr();
-				if (inp.get() != "]" || idx.type != VAR_INTEGER)  goto _err;
-				if (!heap.count(v->i) || idx.i < 0 || idx.i >= heap.at(v->i).arr.size())  goto _err2;
+				if (inp.get() != "]")  goto _err;
+				if (!flag_expr_eval)  continue;
+				if (idx.type != VAR_INTEGER)  goto _err2;
+				if (!heap.count(v->i) || idx.i < 0 || idx.i >= heap.at(v->i).arr.size())  goto _err3;
 				v = &heap.at(v->i).arr.at(idx.i);
 			}
 			else  break;
 		// end varpath parse
 		return *v;
 		_err:   throw IBError("expr_varpath", lno);
-		_err2:  throw IBError("index out of range", lno);
+		_err2:  throw IBError("expected integer", lno);
+		_err3:  throw IBError("index out of range", lno);
 	}
 
 
@@ -317,7 +360,7 @@ struct InterBasic {
 		// array or string length
 		if (id == "len") {
 			auto& v = get_def("_arg1");
-			auto& r = vars["_ret"] = { VAR_INTEGER, 0 };
+			auto& r = vars["_ret"] = Var::ZERO;
 			if      (v.type == VAR_STRING)  r.i = v.s.length();
 			else if (v.type == VAR_ARRAY)   r.i = heap.at(v.i).arr.size();
 			else    throw IBError("expected array or string", lno);
@@ -344,7 +387,7 @@ struct InterBasic {
 			auto& v = get_def("_arg1");
 			if (v.type != VAR_ARRAY && v.type != VAR_OBJECT)  throw IBError("expected array / object", lno);
 			heap.erase(v.i);
-			vars["_ret"] = { VAR_INTEGER, .i=0 };
+			vars["_ret"] = Var::ZERO;
 		}
 		// set object property
 		else if (id == "setprop") {
