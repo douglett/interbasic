@@ -203,7 +203,7 @@ struct InterBasic {
 		return expr_or();
 	}
 	Var expr_or() {
-		Var  v = expr_compare();
+		Var  v = expr_and();
 		if (inp.peek() == "|" && inp.peek(1) == "|") {
 			inp.get(), inp.get();
 			if      (!flag_expr_eval)  return expr_or(), Var::VNULL;
@@ -218,6 +218,27 @@ struct InterBasic {
 				expr_or();  // note: this shouldn't evaluate, but needs to for parsing reasons.
 				flag_expr_eval = 1;
 				return Var::ONE;
+			}
+		}
+		return v;
+		_err:   throw IBError("expected integer", lno);
+	}
+	Var expr_and() {
+		Var  v = expr_compare();
+		if (inp.peek() == "&" && inp.peek(1) == "&") {
+			inp.get(), inp.get();
+			if      (!flag_expr_eval)  return expr_and(), Var::VNULL;
+			else if (v.type != VAR_INTEGER)  goto _err;
+			else if (v.i) {
+				Var q = expr_and();  // note: this should evaluate
+				if (q.type != VAR_INTEGER)  goto _err;
+				return { VAR_INTEGER, .i = !!q.i };
+			}
+			else {
+				flag_expr_eval = 0;
+				expr_and();  // note: this shouldn't evaluate, but needs to for parsing reasons.
+				flag_expr_eval = 1;
+				return Var::ZERO;
 			}
 		}
 		return v;
