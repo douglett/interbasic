@@ -14,13 +14,13 @@ TODO:
 	- reference counters
 - autofree object dims
 -
-- compiling expressions to linear asm-like structure
-	- big change!
 - function calls in expressions 
 	- actually, this will break the call stack so can't do this now
 
 DONE:
 -----
+- reworking expressions to have lazy evaluation
+	- added missing expressions
 - single-line dim list
 - else / else-if
 	- minor cleanup
