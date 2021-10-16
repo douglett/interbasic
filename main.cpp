@@ -52,15 +52,37 @@ struct InterBasic {
 		else if (is_comment(cmd))   ;  // empty line (with comment)	
 		// dim / undim
 		else if (cmd == "dim") {
-			// get optional type here
 			auto& vv = callstack.size() ? callstack.back().vars : vars;
 			while (!inp.eol()) {
-				auto& id = inp.get();
-				if      (vv.count(id))  throw IBError("redefinition of "+id, lno);
-				else if (inp.peek() == "=")  inp.get(),  vv[id] = expr();
-				else    vv[id] = Var::ZERO;
-				if (inp.peek() != ",")  break;  // allow comma seperated dim list
+				// get type and id info
+				string type, id;
+				if (is_identifier(inp.peek(0)) && inp.peek(1) == "&" && is_identifier(inp.peek(2)))
+					{ type = inp.get();  type += inp.get();  id = inp.get(); }
+				else if (is_identifier(inp.peek(0)) && is_identifier(inp.peek(1)))
+					{ type = inp.get();  id = inp.get(); }
+				else
+					{ type = "int";  inp.expecttype("identifier", id); }
+				// initialise
+				if (type == "int" && inp.peek() == "=")
+					{ inp.get();  vv[id] = expr();  if (vv[id].type != VAR_INTEGER) goto _typeerr; }
+				else if (type == "int")
+					{ vv[id] = Var::ZERO; }
+				else if (type == "string" && inp.peek() == "=")
+					{ inp.get();  vv[id] = expr();  if (vv[id].type != VAR_STRING) goto _typeerr; }
+				else if (type == "string")
+					{ vv[id] = Var::EMPTYSTR; }
+				else if (type == "array&")
+					{ inp.expect("=");  vv[id] = expr();  if (vv[id].type != VAR_ARRAY) goto _typeerr; }
+				else if (type == "array")
+					{ heap[++heap_top] = { VAR_ARRAY };  vv[id] = { VAR_ARRAY, .i=heap_top }; }
+				else
+					{ throw IBError("unknown type: "+type, lno); }
+				// allow comma seperated dim list
+				if (inp.peek() != ",")  break;  
 				inp.get();
+				continue;
+				// errors
+				_typeerr:  throw IBError("expected expression of type "+type, lno);
 			}
 			inp.expecttype("eol");
 		}
@@ -75,6 +97,7 @@ struct InterBasic {
 			inp.expect("=");
 			auto  val = expr();
 			inp.expecttype("eol");
+			if (var.type == VAR_ARRAY || var.type == VAR_OBJECT)  throw IBError("assignment to array / object", lno);
 			// if (var.type == VAR_ARRAY || var.type == VAR_OBJECT || val.type == VAR_ARRAY || val.type == VAR_OBJECT)
 			// 	printf("warning: assigning to/from object or array (L%d)\n", lno);
 			var = val;
@@ -404,6 +427,14 @@ struct InterBasic {
 			heap[++heap_top] = { VAR_ARRAY };
 			vars["_ret"] = { VAR_ARRAY, .i=heap_top };
 		}
+		// resize array
+		else if (id == "resize") {
+			auto& arr  = get_def("_arg1");
+			auto& size = get_def("_arg2");
+			if (arr.type != VAR_ARRAY)  throw IBError("expected array", lno);
+			heap.at(arr.i).arr.resize(size.i);
+			vars["_ret"] = Var::ZERO;
+		}
 		// free memory
 		else if (id == "free") {
 			auto& v = get_def("_arg1");
@@ -432,18 +463,18 @@ struct InterBasic {
 		// split string by whitespace
 		else if (id == "split") {
 			string s;
-			auto& v = get_def("_arg1");
-			sysfunc("makearray");
-			auto& r = vars["_ret"];
-			auto& arr = heap.at(r.i).arr;
-			if (v.type != VAR_STRING)  throw IBError("expected string", lno);
-			for (auto c : v.s)
+			auto& arr_ref   = get_def("_arg1");
+			const auto& val = get_def("_arg2");
+			if (arr_ref.type != VAR_ARRAY || val.type != VAR_STRING)  throw IBError("expected array, string", lno);
+			auto& arr = heap.at(arr_ref.i).arr;
+			for (char c : val.s)
 				if (isspace(c)) {
 					if (s.size())  arr.push_back({ VAR_STRING, .i=0, .s=s });
 					s = "";
 				}
 				else  s += c;
 			if (s.size())  arr.push_back({ VAR_STRING, .i=0, .s=s });
+			vars["_ret"] = { VAR_INTEGER, .i=(int32_t)arr.size() };
 		}
 		else  return 0;
 		// found

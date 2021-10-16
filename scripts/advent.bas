@@ -1,4 +1,4 @@
-dim current_room = "room1"
+dim string current_room = "room1"
 
 dim maf = 2+2-3
 print "quick maf", maf
@@ -32,7 +32,7 @@ function mainloop
 end function
 
 function default_actions
-	dim cmd = _arg1
+	dim array& cmd = _arg1
 	# call split: _arg1: cmd
 	# command checking
 	call strcmp: cmd[0], "quit"
@@ -51,13 +51,14 @@ function default_actions
 end function
 
 function room1
-	dim inp, cmd, cmp_east, cmp_e
+	dim inp, cmp_east, cmp_e
+	dim array cmd
 	while 1
 		print "You are in a dark room."
 		print "exits: east"
 		input inp
-		call split: inp
-		let cmd = _ret
+		call resize: cmd, 0
+		call split: cmd, inp
 		# all room actions
 		call default_actions: cmd
 		if _ret
@@ -73,18 +74,19 @@ function room1
 			let current_room = "room2"
 			return
 		end if
-		call free: cmd
+		# call free: cmd
 	end while
 end function
 
 function room2
-	dim inp, cmd, cmp_west, cmp_w
+	dim inp, cmp_west, cmp_w
+	dim array cmd
 	while 1
 		print "You are in a bright room."
 		print "exits: west"
 		input inp
-		call split: inp
-		let cmd = _ret
+		call resize: cmd, 0
+		call split: cmd, inp
 		# all room actions
 		call default_actions: cmd
 		if _ret
@@ -100,6 +102,6 @@ function room2
 			let current_room = "room1"
 			return
 		end if
-		call free: cmd
+		# call free: cmd
 	end while
 end function

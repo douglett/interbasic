@@ -26,11 +26,14 @@ struct Var {
 	static const Var ZERO;
 	static const Var ONE;
 	// static const Var FZERO;
+	// static const Var FONE;
+	static const Var EMPTYSTR;
 };
 
-const Var Var::VNULL = { VAR_NULL };
-const Var Var::ZERO  = { VAR_INTEGER, 0 };
-const Var Var::ONE   = { VAR_INTEGER, 1 };
+const Var Var::VNULL    = { VAR_NULL };
+const Var Var::ZERO     = { VAR_INTEGER, 0 };
+const Var Var::ONE      = { VAR_INTEGER, 1 };
+const Var Var::EMPTYSTR = { VAR_STRING, 0, "" };
 
 
 
