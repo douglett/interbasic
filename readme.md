@@ -7,6 +7,7 @@ Interpreted basic.
 
 TODO:
 -----
+- function memory dealloc
 - typed dims
 - automake object dims
 - object/array belonging to dims
@@ -19,6 +20,7 @@ TODO:
 
 DONE:
 -----
+- better management of heap
 - reworking expressions to have lazy evaluation
 	- added missing expressions
 - single-line dim list

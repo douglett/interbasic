@@ -223,7 +223,7 @@ struct InterBasic {
 	// expression parsing
 	int flag_expr_eval = 1;
 	Var expr() {
-		flag_expr_eval = 1;
+		// flag_expr_eval = 1;
 		return expr_or();
 	}
 	Var expr_or() {
@@ -334,9 +334,7 @@ struct InterBasic {
 				auto& id2 = inp.get();
 				if (!is_identifier(id2))  goto _err;
 				if (!flag_expr_eval)  continue;
-				if (v->type != VAR_OBJECT)  goto _err2;
-				if (!heap.count(v->i) || !heap.at(v->i).obj.count(id2))  goto _err3;
-				v = &heap.at(v->i).obj.at(id2);
+				v = &heap_get_at(*v, id2);
 			}
 			else if (inp.peek() == "[") {  // array offset
 				inp.get();
@@ -344,15 +342,13 @@ struct InterBasic {
 				if (inp.get() != "]")  goto _err;
 				if (!flag_expr_eval)  continue;
 				if (idx.type != VAR_INTEGER)  goto _err2;
-				if (!heap.count(v->i) || idx.i < 0 || idx.i >= heap.at(v->i).arr.size())  goto _err3;
-				v = &heap.at(v->i).arr.at(idx.i);
+				v = &heap_get_at(*v, idx.i);
 			}
 			else  break;
 		// end varpath parse
 		return *v;
 		_err:   throw IBError("expr_varpath", lno);
 		_err2:  throw IBError("expected integer", lno);
-		_err3:  throw IBError("index out of range", lno);
 	}
 
 
@@ -364,6 +360,23 @@ struct InterBasic {
 		else if (vars.count(id))  return vars.at(id);
 		throw IBError("undefined variable: "+id, lno);
 	}
+	HeapMemory& heap_get(const Var& ptr) {
+		if (!heap.count(ptr.i))  throw IBError("pointer error", lno);
+		return heap.at(ptr.i);
+	}
+	Var& heap_get_at(const Var& ptr, int32_t offset) {
+		auto& mem = heap_get(ptr);
+		if (mem.type != VAR_ARRAY || offset < 0 || offset >= mem.arr.size())
+			throw IBError("pointer offset error", lno);
+		return mem.arr.at(offset);
+	}
+	Var& heap_get_at(const Var& ptr, const string& property) {
+		auto& mem = heap_get(ptr);
+		if (mem.type != VAR_OBJECT || !mem.obj.count(property))
+			throw IBError("pointer offset error", lno);
+		return mem.obj.at(property);
+	}
+
 	// int find_line(const vector<string>& pattern, int start, int direction=1) const {
 	// 	int dir = direction < 0 ? -1 : +1;
 	// 	for (int i = start; i >= 0 && i < inp.lines.size(); i += dir) {
@@ -392,8 +405,8 @@ struct InterBasic {
 		case VAR_NULL:     return "null";
 		case VAR_INTEGER:  return std::to_string(v.i);
 		case VAR_STRING:   return v.s;
-		case VAR_ARRAY:    return "array:" + to_string( heap.at(v.i).arr.size() );
-		case VAR_OBJECT:   return "object:"+ to_string( heap.at(v.i).obj.size() );
+		case VAR_ARRAY:    return "array:" + to_string( v.i );
+		case VAR_OBJECT:   return "object:"+ to_string( v.i );
 		}
 		throw IBError();
 	}
@@ -407,7 +420,7 @@ struct InterBasic {
 			auto& v = get_def("_arg1");
 			auto& r = vars["_ret"] = Var::ZERO;
 			if      (v.type == VAR_STRING)  r.i = v.s.length();
-			else if (v.type == VAR_ARRAY)   r.i = heap.at(v.i).arr.size();
+			else if (v.type == VAR_ARRAY)   r.i = heap_get(v.i).arr.size();
 			else    throw IBError("expected array or string", lno);
 		}
 		// array position
@@ -415,7 +428,7 @@ struct InterBasic {
 		// 	auto& v = get_def("_arg1");
 		// 	auto& p = get_def("_arg2");
 		// 	if (v.type != VAR_ARRAY || p.type != VAR_INTEGER)  throw IBError("expected array, integer", lno);
-		// 	vars["_ret"] = heap.at(v.i).arr.at(p.i);
+		// 	vars["_ret"] = heap_get(v.i).arr.at(p.i);
 		// }
 		// make object
 		else if (id == "makeobj") {
@@ -431,8 +444,8 @@ struct InterBasic {
 		else if (id == "resize") {
 			auto& arr  = get_def("_arg1");
 			auto& size = get_def("_arg2");
-			if (arr.type != VAR_ARRAY)  throw IBError("expected array", lno);
-			heap.at(arr.i).arr.resize(size.i);
+			if (arr.type != VAR_ARRAY || size.type != VAR_INTEGER)  throw IBError("expected array, integer", lno);
+			heap_get(arr).arr.resize(size.i);
 			vars["_ret"] = Var::ZERO;
 		}
 		// free memory
@@ -449,7 +462,7 @@ struct InterBasic {
 			auto& v = get_def("_arg3");
 			if (o.type != VAR_OBJECT || p.type != VAR_STRING || v.type == VAR_NULL)
 				throw IBError("expected object, string, var", lno);
-			auto& obj = heap.at(o.i).obj;
+			auto& obj = heap_get(o.i).obj;
 			obj[p.s] = v;
 			vars["_ret"] = v;  // return assugned property
 		}
@@ -466,7 +479,7 @@ struct InterBasic {
 			auto& arr_ref   = get_def("_arg1");
 			const auto& val = get_def("_arg2");
 			if (arr_ref.type != VAR_ARRAY || val.type != VAR_STRING)  throw IBError("expected array, string", lno);
-			auto& arr = heap.at(arr_ref.i).arr;
+			auto& arr = heap_get(arr_ref.i).arr;
 			for (char c : val.s)
 				if (isspace(c)) {
 					if (s.size())  arr.push_back({ VAR_STRING, .i=0, .s=s });
