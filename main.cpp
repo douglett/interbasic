@@ -196,7 +196,7 @@ struct InterBasic {
 		else if (cmd == "break")     inp.expecttype("eol"),  inp.lno = inp.codemap_get(lno).end;  // jump to end of while block
 		// else if (cmd == "return")    inp.expecttype("eol"),  inp.lno = callstack.at(callstack.size()-1).lno,  callstack.pop_back();  // return from call
 		else if (cmd == "return") {
-			Var v = inp.eol() ? Var::ZERO : expr();
+			vars["_ret"] = inp.eol() ? Var::ZERO : expr();
 			if (vars["_ret"].type != VAR_INTEGER)  throw IBError("return value must be integer", lno);
 			inp.expecttype("eol");
 			if (callstack.size() == 0)  throw IBError("no local scope", lno);
