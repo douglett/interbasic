@@ -196,7 +196,7 @@ struct InterBasic {
 		else if (cmd == "break")     inp.expecttype("eol"),  inp.lno = inp.codemap_get(lno).end;  // jump to end of while block
 		// else if (cmd == "return")    inp.expecttype("eol"),  inp.lno = callstack.at(callstack.size()-1).lno,  callstack.pop_back();  // return from call
 		else if (cmd == "return") {
-			vars["_ret"] = inp.eol() ? Var::ZERO : expr();
+			Var v = inp.eol() ? Var::ZERO : expr();
 			if (vars["_ret"].type != VAR_INTEGER)  throw IBError("return value must be integer", lno);
 			inp.expecttype("eol");
 			if (callstack.size() == 0)  throw IBError("no local scope", lno);
@@ -376,6 +376,24 @@ struct InterBasic {
 			throw IBError("pointer offset error", lno);
 		return mem.obj.at(property);
 	}
+	void heap_free(const Var& ptr) {
+		if (ptr.type == VAR_ARRAY || ptr.type == VAR_OBJECT)
+			heap.erase(ptr.i);
+	}
+	void func_call(const string& id, StackFrame sf) {
+		sf.lno = inp.lno;
+		callstack.push_back(sf);
+		inp.lno = inp.codemap_getfunc(id).start;
+	}
+	void func_return(const Var& val) {
+		if (val.type != VAR_INTEGER)  throw IBError("return value must be integer", lno);
+		if (callstack.size() == 0)    throw IBError("no local scope", lno);
+		vars["_ret"] = val;
+		for (auto& vmap : callstack.back().vars)
+			heap_free(vmap.second);
+		inp.lno = callstack.back().lno;
+		callstack.pop_back();
+	}
 
 	// int find_line(const vector<string>& pattern, int start, int direction=1) const {
 	// 	int dir = direction < 0 ? -1 : +1;
@@ -420,7 +438,7 @@ struct InterBasic {
 			auto& v = get_def("_arg1");
 			auto& r = vars["_ret"] = Var::ZERO;
 			if      (v.type == VAR_STRING)  r.i = v.s.length();
-			else if (v.type == VAR_ARRAY)   r.i = heap_get(v.i).arr.size();
+			else if (v.type == VAR_ARRAY)   r.i = heap_get(v).arr.size();
 			else    throw IBError("expected array or string", lno);
 		}
 		// array position
@@ -462,7 +480,7 @@ struct InterBasic {
 			auto& v = get_def("_arg3");
 			if (o.type != VAR_OBJECT || p.type != VAR_STRING || v.type == VAR_NULL)
 				throw IBError("expected object, string, var", lno);
-			auto& obj = heap_get(o.i).obj;
+			auto& obj = heap_get(o).obj;
 			obj[p.s] = v;
 			vars["_ret"] = v;  // return assugned property
 		}
@@ -479,7 +497,7 @@ struct InterBasic {
 			auto& arr_ref   = get_def("_arg1");
 			const auto& val = get_def("_arg2");
 			if (arr_ref.type != VAR_ARRAY || val.type != VAR_STRING)  throw IBError("expected array, string", lno);
-			auto& arr = heap_get(arr_ref.i).arr;
+			auto& arr = heap_get(arr_ref).arr;
 			for (char c : val.s)
 				if (isspace(c)) {
 					if (s.size())  arr.push_back({ VAR_STRING, .i=0, .s=s });
