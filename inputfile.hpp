@@ -92,10 +92,10 @@ struct InputFile {
 				string type = peek() == "if" ? "else-if" : "else";
 				cm.inner.push_back({ type, lno, cm.start });
 			}
-			else if (cmd == "break") {
-				if (nest_while.size() == 0)  throw IBError("break outside of while", lno);
+			else if (cmd == "break" || cmd == "continue") {
+				if (nest_while.size() == 0)  throw IBError(cmd+" outside of while", lno);
 				auto& cm = codemap.at(nest_while.back());
-				cm.inner.push_back({ "break", lno, cm.start });
+				cm.inner.push_back({ cmd, lno, cm.start });
 			}
 			else if (cmd == "end") {
 				auto& type = peek();

@@ -75,6 +75,10 @@ struct InterBasic {
 					{ inp.expect("=");  vv[id] = expr();  if (vv[id].type != VAR_ARRAY_REF) goto _typeerr; }
 				else if (type == "array")
 					{ heap[++heap_top] = { VAR_ARRAY };  vv[id] = { VAR_ARRAY, .i=heap_top }; }
+				else if (type == "object&")
+					{ inp.expect("=");  vv[id] = expr();  if (vv[id].type != VAR_OBJECT_REF) goto _typeerr; }
+				else if (type == "object")
+					{ heap[++heap_top] = { VAR_OBJECT };  vv[id] = { VAR_OBJECT, .i=heap_top }; }
 				else
 					{ throw IBError("unknown type: "+type, lno); }
 				// allow comma seperated dim list
@@ -186,12 +190,8 @@ struct InterBasic {
 		else if (cmd == "function")  inp.lno = inp.codemap_getfunc(inp.peek()).end;  // skip function block
 		else if (cmd == "die")       inp.expecttype("eol"),  inp.lno = inp.lines.size();  // jump to end, and so halt
 		else if (cmd == "break")     inp.expecttype("eol"),  inp.lno = inp.codemap_get(lno).end;  // jump to end of while block
+		else if (cmd == "continue")  inp.expecttype("eol"),  inp.lno = inp.codemap_get(lno).start;  // jump to start of while block
 		else if (cmd == "return")    func_return( inp.eol() ? Var::ZERO : expr() ),  inp.expecttype("eol");  // return from call
-		// else if (cmd == "return") {
-		// 	Var v = inp.eol() ? Var::ZERO : expr();
-		// 	inp.expecttype("eol");
-		// 	func_return(v);
-		// }
 		// block end
 		else if (cmd == "end") {
 			auto &block_type = inp.get();

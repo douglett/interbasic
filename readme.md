@@ -7,7 +7,6 @@ Interpreted basic.
 
 TODO:
 -----
-- continue statement
 - automake object dims
 - object/array pointers
 	- reference counters
@@ -17,6 +16,7 @@ TODO:
 
 DONE:
 -----
+- continue statement
 - autofree array / object dims
 - automake array dims
 - typed dims (system types)
