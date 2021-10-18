@@ -51,7 +51,8 @@ function default_actions
 end function
 
 function room1
-	dim inp, cmp_east, cmp_e
+	dim cmp_east, cmp_e
+	dim string inp
 	dim array cmd
 	while 1
 		print "You are in a dark room."
@@ -59,6 +60,11 @@ function room1
 		input inp
 		call resize: cmd, 0
 		call split: cmd, inp
+		# sanity check
+		call len: cmd
+		if _ret == 0
+			continue
+		end if
 		# all room actions
 		call default_actions: cmd
 		if _ret
@@ -79,7 +85,8 @@ function room1
 end function
 
 function room2
-	dim inp, cmp_west, cmp_w
+	dim cmp_west, cmp_w
+	dim string inp
 	dim array cmd
 	while 1
 		print "You are in a bright room."

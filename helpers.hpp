@@ -12,6 +12,8 @@ enum VAR_TYPE {
 	VAR_STRING,
 	VAR_ARRAY,
 	VAR_OBJECT,
+	VAR_ARRAY_REF,
+	VAR_OBJECT_REF,
 };
 
 struct Var {

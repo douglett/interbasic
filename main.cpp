@@ -46,7 +46,7 @@ struct InterBasic {
 	
 	void runline() {
 		lno = inp.lno;
-		// inp.showtokens(inp.tok, inp.lno);
+		// inp.showtokens(inp.tok, inp.lno);  // debugging!
 		auto& cmd = inp.eol() ? inp.peek() : inp.get();
 		if      (cmd == "")         ;  // empty line
 		else if (is_comment(cmd))   ;  // empty line (with comment)	
@@ -72,7 +72,7 @@ struct InterBasic {
 				else if (type == "string")
 					{ vv[id] = Var::EMPTYSTR; }
 				else if (type == "array&")
-					{ inp.expect("=");  vv[id] = expr();  if (vv[id].type != VAR_ARRAY) goto _typeerr; }
+					{ inp.expect("=");  vv[id] = expr();  if (vv[id].type != VAR_ARRAY_REF) goto _typeerr; }
 				else if (type == "array")
 					{ heap[++heap_top] = { VAR_ARRAY };  vv[id] = { VAR_ARRAY, .i=heap_top }; }
 				else
@@ -93,13 +93,11 @@ struct InterBasic {
 			else if (vars.count(id))  vars.erase(id);
 		}
 		else if (cmd == "let") {
-			auto& var = expr_varpath();
+			auto& var = expr_varpath_reference();
+			if (var.type == VAR_ARRAY || var.type == VAR_OBJECT)  throw IBError("assignment to array / object", lno);
 			inp.expect("=");
 			auto  val = expr();
 			inp.expecttype("eol");
-			if (var.type == VAR_ARRAY || var.type == VAR_OBJECT)  throw IBError("assignment to array / object", lno);
-			// if (var.type == VAR_ARRAY || var.type == VAR_OBJECT || val.type == VAR_ARRAY || val.type == VAR_OBJECT)
-			// 	printf("warning: assigning to/from object or array (L%d)\n", lno);
 			var = val;
 		}
 		// io text commands
@@ -117,11 +115,13 @@ struct InterBasic {
 			printf("\n");
 		}
 		else if (cmd == "input") {
+			auto& var = expr_varpath_reference();
+			// if (var.type == VAR_ARRAY || var.type == VAR_OBJECT)  throw IBError("assignment to array / object", lno);
+			if (var.type != VAR_STRING)  throw IBError("expected string", lno);
 			string s;
-			auto& v = expr_varpath();
 			printf("> ");
 			getline(cin, s);
-			v = { VAR_STRING, .i=0, .s=s };
+			var = { VAR_STRING, .i=0, .s=s };
 		}
 		// conditionals
 		else if (cmd == "if" || cmd == "while") {
@@ -161,7 +161,6 @@ struct InterBasic {
 		// function call
 		else if (cmd == "call") {
 			auto& id   = inp.get();
-			// Var*  res  = NULL;
 			int   argc = 0;
 			StackFrame frame = { lno };  // new stack frame
 			// get arguments
@@ -175,44 +174,31 @@ struct InterBasic {
 			}
 			// put result
 			if (inp.peek() == ":") {
-				// inp.get();
-				// res = &expr_varpath();
 				throw IBError("return paths in call deprecated (for now)", lno);
 			}
 			inp.expecttype("eol");  // endline
-			// printf("callstack for %s:\n", id.c_str());
-			// for (auto v : frame.vars)
-			// 	printf("  %s  %s\n", v.first.c_str(), stringify(v.second).c_str());
 			// do call
 			callstack.push_back(frame);  // put new frame on callstack
 			if    (sysfunc(id))  callstack.pop_back();  // run system function, if possible, then dump local scope
 			else  inp.lno = inp.codemap_getfunc(id).start;
-			// apply results
-			// if (res)  *res = get_def("_ret");
 		}
 		// various jumps
 		else if (cmd == "function")  inp.lno = inp.codemap_getfunc(inp.peek()).end;  // skip function block
 		else if (cmd == "die")       inp.expecttype("eol"),  inp.lno = inp.lines.size();  // jump to end, and so halt
 		else if (cmd == "break")     inp.expecttype("eol"),  inp.lno = inp.codemap_get(lno).end;  // jump to end of while block
-		// else if (cmd == "return")    inp.expecttype("eol"),  inp.lno = callstack.at(callstack.size()-1).lno,  callstack.pop_back();  // return from call
-		else if (cmd == "return") {
-			vars["_ret"] = inp.eol() ? Var::ZERO : expr();
-			if (vars["_ret"].type != VAR_INTEGER)  throw IBError("return value must be integer", lno);
-			inp.expecttype("eol");
-			if (callstack.size() == 0)  throw IBError("no local scope", lno);
-			inp.lno = callstack.back().lno,  callstack.pop_back();
-		}
+		else if (cmd == "return")    func_return( inp.eol() ? Var::ZERO : expr() ),  inp.expecttype("eol");  // return from call
+		// else if (cmd == "return") {
+		// 	Var v = inp.eol() ? Var::ZERO : expr();
+		// 	inp.expecttype("eol");
+		// 	func_return(v);
+		// }
 		// block end
 		else if (cmd == "end") {
 			auto &block_type = inp.get();
 			inp.expecttype("eol");
 			if      (block_type == "if")        flag_elseif = 0;  // make sure we are executing normally
 			else if (block_type == "while")     inp.lno = inp.codemap_get(lno).start;
-			else if (block_type == "function") {
-				if (callstack.size() == 0)  throw IBError("no local scope", lno);
-				inp.lno = callstack.back().lno,  callstack.pop_back();
-				vars["_ret"] = Var::ZERO;
-			}
+			else if (block_type == "function")  func_return(Var::ZERO);
 			else    throw IBError("unknown end: " + block_type, lno);
 		}
 		// unknown - error
@@ -324,7 +310,13 @@ struct InterBasic {
 		else if (is_literal(s, &v.s))  return inp.get(), v.type=VAR_STRING, v;
 		throw IBError("expected Var, got ["+s+"]", lno);
 	}
-	Var& expr_varpath() {
+	Var expr_varpath() {
+		Var v = expr_varpath_reference();
+		if      (v.type == VAR_ARRAY)   v.type = VAR_ARRAY_REF;
+		else if (v.type == VAR_OBJECT)  v.type = VAR_OBJECT_REF;
+		return v;
+	}
+	Var& expr_varpath_reference() {
 		auto& id = inp.get();
 		Var*  v  = &get_def(id);  // first item in chain
 		// parse chain
@@ -378,6 +370,7 @@ struct InterBasic {
 	}
 	void heap_free(const Var& ptr) {
 		if (ptr.type == VAR_ARRAY || ptr.type == VAR_OBJECT)
+			// printf(">>> freeing  %d \n", ptr.i),
 			heap.erase(ptr.i);
 	}
 	void func_call(const string& id, StackFrame sf) {
@@ -388,42 +381,20 @@ struct InterBasic {
 	void func_return(const Var& val) {
 		if (val.type != VAR_INTEGER)  throw IBError("return value must be integer", lno);
 		if (callstack.size() == 0)    throw IBError("no local scope", lno);
-		vars["_ret"] = val;
 		for (auto& vmap : callstack.back().vars)
-			heap_free(vmap.second);
+			heap_free(vmap.second);  // free local vars
 		inp.lno = callstack.back().lno;
 		callstack.pop_back();
+		vars["_ret"] = val;
 	}
-
-	// int find_line(const vector<string>& pattern, int start, int direction=1) const {
-	// 	int dir = direction < 0 ? -1 : +1;
-	// 	for (int i = start; i >= 0 && i < inp.lines.size(); i += dir) {
-	// 		auto tok = inp.tokenize(inp.lines.at(i));
-	// 		if (tok.size() < pattern.size())  continue;
-	// 		for (int j = 0; j < pattern.size(); j++)
-	// 			if (tok[j] != pattern[j])  goto _next;
-	// 		return i;
-	// 		_next:  ;
-	// 	}
-	// 	throw IBError("find_line: not found: " + join(pattern));
-	// }
-	// int find_end(const string& type, int start) const {
-	// 	int nest = 1;
-	// 	for (int i = start; i < inp.lines.size(); i++) {
-	// 		auto tok = inp.tokenize(inp.lines.at(i));
-	// 		if      (tok.size() < 2)  ;
-	// 		else if (tok.at(0) == type)  nest++;
-	// 		else if (tok.at(0) == "end" && tok.at(1) == type)  nest--;
-	// 		if (nest == 0)  return i;
-	// 	}
-	// 	throw IBError("find_end: no matching 'end " + type + "'", start);
-	// }
 	string stringify(const Var& v) const {
 		switch (v.type) {
 		case VAR_NULL:     return "null";
 		case VAR_INTEGER:  return std::to_string(v.i);
 		case VAR_STRING:   return v.s;
+		case VAR_ARRAY_REF:
 		case VAR_ARRAY:    return "array:" + to_string( v.i );
+		case VAR_OBJECT_REF:
 		case VAR_OBJECT:   return "object:"+ to_string( v.i );
 		}
 		throw IBError();
@@ -437,17 +408,20 @@ struct InterBasic {
 		if (id == "len") {
 			auto& v = get_def("_arg1");
 			auto& r = vars["_ret"] = Var::ZERO;
-			if      (v.type == VAR_STRING)  r.i = v.s.length();
-			else if (v.type == VAR_ARRAY)   r.i = heap_get(v).arr.size();
+			if      (v.type == VAR_STRING)     r.i = v.s.length();
+			else if (v.type == VAR_ARRAY_REF)  r.i = heap_get(v).arr.size();
 			else    throw IBError("expected array or string", lno);
 		}
+
+		// --- deprecated
+
 		// array position
-		// else if (id == "at") {
-		// 	auto& v = get_def("_arg1");
-		// 	auto& p = get_def("_arg2");
-		// 	if (v.type != VAR_ARRAY || p.type != VAR_INTEGER)  throw IBError("expected array, integer", lno);
-		// 	vars["_ret"] = heap_get(v.i).arr.at(p.i);
-		// }
+		else if (id == "at") {
+			auto& v = get_def("_arg1");
+			auto& p = get_def("_arg2");
+			if (v.type != VAR_ARRAY || p.type != VAR_INTEGER)  throw IBError("expected array, integer", lno);
+			vars["_ret"] = heap_get_at(v, p.i);
+		}
 		// make object
 		else if (id == "makeobj") {
 			heap[++heap_top] = { VAR_OBJECT };
@@ -458,14 +432,6 @@ struct InterBasic {
 			heap[++heap_top] = { VAR_ARRAY };
 			vars["_ret"] = { VAR_ARRAY, .i=heap_top };
 		}
-		// resize array
-		else if (id == "resize") {
-			auto& arr  = get_def("_arg1");
-			auto& size = get_def("_arg2");
-			if (arr.type != VAR_ARRAY || size.type != VAR_INTEGER)  throw IBError("expected array, integer", lno);
-			heap_get(arr).arr.resize(size.i);
-			vars["_ret"] = Var::ZERO;
-		}
 		// free memory
 		else if (id == "free") {
 			auto& v = get_def("_arg1");
@@ -473,12 +439,23 @@ struct InterBasic {
 			heap.erase(v.i);
 			vars["_ret"] = Var::ZERO;
 		}
+
+		// ---
+
+		// resize array
+		else if (id == "resize") {
+			auto& arr  = get_def("_arg1");
+			auto& size = get_def("_arg2");
+			if (arr.type != VAR_ARRAY_REF || size.type != VAR_INTEGER)  throw IBError("expected array, integer", lno);
+			heap_get(arr).arr.resize(size.i);
+			vars["_ret"] = Var::ZERO;
+		}
 		// set object property
 		else if (id == "setprop") {
 			auto& o = get_def("_arg1");
 			auto& p = get_def("_arg2");
 			auto& v = get_def("_arg3");
-			if (o.type != VAR_OBJECT || p.type != VAR_STRING || v.type == VAR_NULL)
+			if (o.type != VAR_OBJECT_REF || p.type != VAR_STRING || v.type == VAR_NULL)
 				throw IBError("expected object, string, var", lno);
 			auto& obj = heap_get(o).obj;
 			obj[p.s] = v;
@@ -496,7 +473,7 @@ struct InterBasic {
 			string s;
 			auto& arr_ref   = get_def("_arg1");
 			const auto& val = get_def("_arg2");
-			if (arr_ref.type != VAR_ARRAY || val.type != VAR_STRING)  throw IBError("expected array, string", lno);
+			if (arr_ref.type != VAR_ARRAY_REF || val.type != VAR_STRING)  throw IBError("expected array, string", lno);
 			auto& arr = heap_get(arr_ref).arr;
 			for (char c : val.s)
 				if (isspace(c)) {

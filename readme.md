@@ -7,19 +7,21 @@ Interpreted basic.
 
 TODO:
 -----
-- function memory dealloc
-- typed dims
+- continue statement
 - automake object dims
-- object/array belonging to dims
 - object/array pointers
 	- reference counters
-- autofree object dims
 -
 - function calls in expressions 
 	- actually, this will break the call stack so can't do this now
 
 DONE:
 -----
+- autofree array / object dims
+- automake array dims
+- typed dims (system types)
+- seperate owner pointers and reference pointers
+- function memory dealloc
 - better management of heap
 - reworking expressions to have lazy evaluation
 	- added missing expressions
