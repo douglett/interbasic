@@ -102,6 +102,7 @@ struct InterBasic {
 			inp.expect("=");
 			auto  val = expr();
 			inp.expecttype("eol");
+			if (var.type != val.type)  throw IBError("types don't match in assignment", lno);
 			var = val;
 		}
 		// io text commands
@@ -164,27 +165,24 @@ struct InterBasic {
 		}
 		// function call
 		else if (cmd == "call") {
-			auto& id   = inp.get();
-			int   argc = 0;
-			StackFrame frame = { lno };  // new stack frame
-			// get arguments
+			auto& id = inp.get();
+			// arguments
+			vector<Var> args;
 			if (inp.peek() == ":") {
 				inp.get();
 				while (!inp.eol())
 					if      (is_comment(inp.peek()))  inp.get();
 					else if (inp.peek() == ":")  break;
 					else if (inp.peek() == ",")  inp.get();
-					else    frame.vars["_arg"+to_string(++argc)] = expr();
+					// else    frame.vars["_arg"+to_string(++argc)] = expr();
+					else    args.push_back( expr() );
 			}
-			// put result
+			// result
 			if (inp.peek() == ":") {
 				throw IBError("return paths in call deprecated (for now)", lno);
 			}
 			inp.expecttype("eol");  // endline
-			// do call
-			callstack.push_back(frame);  // put new frame on callstack
-			if    (sysfunc(id))  callstack.pop_back();  // run system function, if possible, then dump local scope
-			else  inp.lno = inp.codemap_getfunc(id).start;
+			func_call(id, args);  // do call
 		}
 		// various jumps
 		else if (cmd == "function")  inp.lno = inp.codemap_getfunc(inp.peek()).end;  // skip function block
@@ -342,6 +340,19 @@ struct InterBasic {
 		_err:   throw IBError("expr_varpath", lno);
 		_err2:  throw IBError("expected integer", lno);
 	}
+	// Var expr_call() {
+	// 	string id = inp.get();
+	// 	inp.expect("(");
+	// 	vector<Var> args;
+	// 	while (!inp.eof() || inp.peek() != ")") {
+	// 		if (args.size())  inp.expect(",");
+	// 		args.push_back( expr() );
+	// 	}
+	// 	inp.expect(")");
+	// 	if (!flag_expr_eval)  return Var::VNULL;
+	// 	func_call(id, args);
+	// 	return vars["_ret"];
+	// }
 
 
 
@@ -373,10 +384,14 @@ struct InterBasic {
 			// printf(">>> freeing  %d \n", ptr.i),
 			heap.erase(ptr.i);
 	}
-	void func_call(const string& id, StackFrame sf) {
-		sf.lno = inp.lno;
-		callstack.push_back(sf);
-		inp.lno = inp.codemap_getfunc(id).start;
+	void func_call(const string& id, const vector<Var>& args) {
+		StackFrame frame = { .lno=inp.lno };
+		int argc = 0;
+		for (auto& arg : args)
+			frame.vars["_arg"+to_string(++argc)] = arg;
+		callstack.push_back(frame);
+		if    (sysfunc(id))  callstack.pop_back();  // run system function, if possible, then dump local scope
+		else  inp.lno = inp.codemap_getfunc(id).start;
 	}
 	void func_return(const Var& val) {
 		if (val.type != VAR_INTEGER)  throw IBError("return value must be integer", lno);

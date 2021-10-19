@@ -7,9 +7,7 @@ Interpreted basic.
 
 TODO:
 -----
-- automake object dims
-- object/array pointers
-	- reference counters
+- reference counters?
 -
 - function calls in expressions 
 	- actually, this will break the call stack so can't do this now
@@ -17,7 +15,9 @@ TODO:
 DONE:
 -----
 - continue statement
+- automake object dims
 - autofree array / object dims
+- object/array pointers (references)
 - automake array dims
 - typed dims (system types)
 - seperate owner pointers and reference pointers
