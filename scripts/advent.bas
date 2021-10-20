@@ -1,17 +1,27 @@
-dim string current_room = "room1"
-
+# maths testing
 dim maf = 2+2-3
 print "quick maf", maf
 print "quick maf", 2+2-3
 
-type t
-	member t a
-	member t string s
 
-# dim t test
-# let test.a = 1
-# let test.s = "fart"
-# print test.a, test.s
+# type testing
+type ball_t
+	member ball_t int radius
+
+type test_t
+	member test_t a
+	member test_t string s
+	member test_t ball_t ball
+
+dim test_t test
+print test.a, test.s
+let test.a = 1
+let test.s = "fart"
+print test.a, test.s, test.ball.radius
+
+
+# the program
+dim string current_room = "room1"
 
 call mainloop
 print "The end.", _ret

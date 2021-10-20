@@ -7,7 +7,6 @@ Interpreted basic.
 
 TODO:
 -----
-- type constructor
 - type destructor
 - type awareness
 - type assignment (copy)
@@ -19,6 +18,7 @@ TODO:
 
 DONE:
 -----
+- type constructor
 - user defined object types
 - continue statement
 - automake object dims
