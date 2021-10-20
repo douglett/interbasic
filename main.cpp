@@ -9,7 +9,7 @@ using namespace std;
 
 struct InterBasic {
 	struct StackFrame { int lno; map<string, Var> vars; };
-	struct HeapMemory { VAR_TYPE type; vector<Var> arr; map<string, Var> obj; };
+	struct HeapMemory { VAR_TYPE type; string object_type; vector<Var> arr; map<string, Var> obj; };
 	struct TypeMember { string type, id; };
 	struct TypeDef    { string id; vector<TypeMember> members; };
 
@@ -78,19 +78,6 @@ struct InterBasic {
 					{ inp.expect("=");  vv[id] = expr();  if (vv[id].type != VAR_ARRAY_REF) goto _typeerr; }
 				else if (type == "array")
 					{ heap[++heap_top] = { VAR_ARRAY };  vv[id] = { VAR_ARRAY, .i=heap_top }; }
-				// else if (type == "object&")
-				// 	{ inp.expect("=");  vv[id] = expr();  if (vv[id].type != VAR_OBJECT_REF) goto _typeerr; }
-				// else if (type == "object")
-				// 	{ heap[++heap_top] = { VAR_OBJECT };  vv[id] = { VAR_OBJECT, .i=heap_top }; }
-				// user type
-				// else if (type_defined(type)) {
-				// 	auto& o = heap[++heap_top] = { VAR_OBJECT };
-				// 	vv[id] = { VAR_OBJECT, .i=heap_top };
-				// 	for (auto& m : types[type].members)
-				// 		if      (m.type == "int" || m.type == "integer")  o.obj[m.id] = Var::ZERO;
-				// 		else if (m.type == "string")  o.obj[m.id] = Var::EMPTYSTR;
-				// 		else    throw IBError("type def error", lno);
-				// }
 				else if (type_defined(type))
 					{ vv[id] = type_make(type); }
 				else
@@ -415,9 +402,15 @@ struct InterBasic {
 		return mem.obj.at(property);
 	}
 	void heap_free(const Var& ptr) {
-		if (ptr.type == VAR_ARRAY || ptr.type == VAR_OBJECT)
-			// printf(">>> freeing  %d \n", ptr.i),
+		if (ptr.type == VAR_ARRAY) {
+			heap_get(ptr);  // null check
 			heap.erase(ptr.i);
+		}
+		else if (ptr.type == VAR_OBJECT) {
+			for (auto& prop : heap_get(ptr).obj)  // delete each property
+				heap_free(prop.second);
+			heap.erase(ptr.i);
+		}
 	}
 	void func_call(const string& id, const vector<Var>& args) {
 		StackFrame frame = { .lno=inp.lno };
@@ -453,14 +446,17 @@ struct InterBasic {
 	Var type_make(const string& type) {
 		if      (type == "int" || type == "integer")  return Var::ZERO;
 		else if (type == "string")  return Var::EMPTYSTR;
-		// else if (type_defined(type)) {
+		// allocate user type
+		else if (type_defined(type)) {
 			heap[++heap_top] = { VAR_OBJECT };  // alloc
 			Var r = { VAR_OBJECT, .i=heap_top };
 			for (const auto& m : types.at(type).members)
 				heap.at(r.i).obj[m.id] = type_make(m.type);  // build properties recursively
 			return r;
-		// }
-		// throw IBError("making undefined type", lno);
+		}
+		// user reference type
+		// else if (type.length() && type.back() == '&')
+		throw IBError("making type, unknown error", lno);
 	}
 	string stringify(const Var& v) const {
 		switch (v.type) {

@@ -13,11 +13,14 @@ type test_t
 	member test_t string s
 	member test_t ball_t ball
 
-dim test_t test
-print test.a, test.s
-let test.a = 1
-let test.s = "fart"
-print test.a, test.s, test.ball.radius
+function typetest
+	dim test_t test
+	print test.a, test.s
+	let test.a = 1
+	let test.s = "fart"
+	print test.a, test.s, test.ball.radius
+end function
+call typetest
 
 
 # the program
