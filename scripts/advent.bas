@@ -4,6 +4,15 @@ dim maf = 2+2-3
 print "quick maf", maf
 print "quick maf", 2+2-3
 
+type t
+	member t a
+	member t string s
+
+# dim t test
+# let test.a = 1
+# let test.s = "fart"
+# print test.a, test.s
+
 call mainloop
 print "The end.", _ret
 die

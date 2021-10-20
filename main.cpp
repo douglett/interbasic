@@ -10,12 +10,15 @@ using namespace std;
 struct InterBasic {
 	struct StackFrame { int lno; map<string, Var> vars; };
 	struct HeapMemory { VAR_TYPE type; vector<Var> arr; map<string, Var> obj; };
+	struct TypeMember { string type, id; };
+	struct TypeDef    { string id; vector<TypeMember> members; };
 
 	int      lno = 0;
 	int      flag_elseif = 0;
 	int32_t  heap_top = 0;
 
 	InputFile                 inp;
+	map<string, TypeDef>      types;
 	map<string, Var>          vars;
 	vector<StackFrame>        callstack;
 	map<int32_t, HeapMemory>  heap;
@@ -79,6 +82,13 @@ struct InterBasic {
 					{ inp.expect("=");  vv[id] = expr();  if (vv[id].type != VAR_OBJECT_REF) goto _typeerr; }
 				else if (type == "object")
 					{ heap[++heap_top] = { VAR_OBJECT };  vv[id] = { VAR_OBJECT, .i=heap_top }; }
+				// user type
+				// else if (type_defined(type)) {
+				// 	auto& o = heap[++heap_top] = { VAR_OBJECT };
+				// 	vv[id] = { VAR_OBJECT, .i=heap_top };
+				// 	for (auto& m : types[type].members)
+				// 		o.obj[m.id] = Var::ZERO;
+				// }
 				else
 					{ throw IBError("unknown type: "+type, lno); }
 				// allow comma seperated dim list
@@ -198,6 +208,27 @@ struct InterBasic {
 			else if (block_type == "while")     inp.lno = inp.codemap_get(lno).start;
 			else if (block_type == "function")  func_return(Var::ZERO);
 			else    throw IBError("unknown end: " + block_type, lno);
+		}
+		// user types
+		else if (cmd == "type") {
+			string id;
+			inp.expecttype("identifier", id);
+			inp.expecttype("eol");
+			if (type_defined(id))  throw IBError("type redefinition", lno);
+			types[id] = { id };
+		}
+		else if (cmd == "member") {
+			string type, mtype, id;
+			inp.expecttype("identifier", type);
+			inp.expecttype("identifier", mtype);
+			if    (inp.eol())  id = mtype,  mtype = "int";
+			else  inp.expecttype("identifier", id);
+			inp.expecttype("eol");
+			if (!types.count(type))        throw IBError("user type not defined: "+type, lno);
+			if (!type_defined(mtype))      throw IBError("type not defined", lno);
+			if (type == mtype)             throw IBError("circular definition", lno);
+			if (type_hasmember(type, id))  throw IBError("type member redefinition", lno);
+			types[type].members.push_back({ mtype, id });
 		}
 		// unknown - error
 		else    throw IBError("unknown command: " + cmd, lno);
@@ -401,6 +432,19 @@ struct InterBasic {
 		inp.lno = callstack.back().lno;
 		callstack.pop_back();
 		vars["_ret"] = val;
+	}
+	int type_defined(const string& type) {
+		static const vector<string> DEFAULT_TYPES = { "int", "integer", "string" };
+		for (auto& t : DEFAULT_TYPES)
+			if (t == type)  return 1;
+		if (types.count(type))  return 2;
+		return 0;
+	}
+	int type_hasmember(const string& type, const string& mid) {
+		if (!types.count(type))  throw IBError("error", lno);
+		for (const auto& m : types[type].members)
+			if (m.id == mid)  return 1;
+		return 0;
 	}
 	string stringify(const Var& v) const {
 		switch (v.type) {

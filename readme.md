@@ -7,6 +7,11 @@ Interpreted basic.
 
 TODO:
 -----
+- type constructor
+- type destructor
+- type awareness
+- type assignment (copy)
+- typed arrays
 - reference counters?
 -
 - function calls in expressions 
@@ -14,6 +19,7 @@ TODO:
 
 DONE:
 -----
+- user defined object types
 - continue statement
 - automake object dims
 - autofree array / object dims
