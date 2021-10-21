@@ -14,11 +14,17 @@ type test_t
 	member test_t ball_t ball
 
 function typetest
+	# object
 	dim test_t test
 	print test.a, test.s
+	# object pointer
+	dim test_t& tt = test
+	# assignment
 	let test.a = 1
 	let test.s = "fart"
+	# results
 	print test.a, test.s, test.ball.radius
+	print tt.a, tt.s
 end function
 call typetest
 

@@ -7,10 +7,10 @@ Interpreted basic.
 
 TODO:
 -----
-- type destructor
-- type awareness
-- type assignment (copy)
 - typed arrays
+- typed array pointers (@ ?)
+- type assignment (copy)
+- type awareness (?)
 - reference counters?
 -
 - function calls in expressions 
@@ -18,6 +18,8 @@ TODO:
 
 DONE:
 -----
+- object pointers
+- type destructor
 - type constructor
 - user defined object types
 - continue statement

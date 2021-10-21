@@ -58,9 +58,9 @@ struct InterBasic {
 			auto& vv = callstack.size() ? callstack.back().vars : vars;
 			while (!inp.eol()) {
 				// get type and id info
-				string type, id;
+				string type, id, ref;
 				if (is_identifier(inp.peek(0)) && inp.peek(1) == "&" && is_identifier(inp.peek(2)))
-					{ type = inp.get();  type += inp.get();  id = inp.get(); }
+					{ type = inp.get();  ref = inp.get();  id = inp.get(); }
 				else if (is_identifier(inp.peek(0)) && is_identifier(inp.peek(1)))
 					{ type = inp.get();  id = inp.get(); }
 				else
@@ -74,10 +74,14 @@ struct InterBasic {
 					{ inp.get();  vv[id] = expr();  if (vv[id].type != VAR_STRING) goto _typeerr; }
 				else if (type == "string")
 					{ vv[id] = Var::EMPTYSTR; }
-				else if (type == "array&")
+				else if (type == "array" && ref == "&")
 					{ inp.expect("=");  vv[id] = expr();  if (vv[id].type != VAR_ARRAY_REF) goto _typeerr; }
 				else if (type == "array")
 					{ heap[++heap_top] = { VAR_ARRAY };  vv[id] = { VAR_ARRAY, .i=heap_top }; }
+				// else if (type_defined(type) && ref == "&")
+				// 	{ inp.expect("=");  vv[id] = expr();  if (vv[id].type != VAR_OBJECT_REF) goto _typeerr; }
+				else if (type_defined(type) && ref == "&")
+					{ inp.expect("=");  vv[id] = expr();  if (vv[id].type != VAR_OBJECT_REF || heap_get(vv[id]).object_type != type) goto _typeerr; }
 				else if (type_defined(type))
 					{ vv[id] = type_make(type); }
 				else
@@ -448,7 +452,7 @@ struct InterBasic {
 		else if (type == "string")  return Var::EMPTYSTR;
 		// allocate user type
 		else if (type_defined(type)) {
-			heap[++heap_top] = { VAR_OBJECT };  // alloc
+			heap[++heap_top] = { VAR_OBJECT, .object_type=type };  // alloc
 			Var r = { VAR_OBJECT, .i=heap_top };
 			for (const auto& m : types.at(type).members)
 				heap.at(r.i).obj[m.id] = type_make(m.type);  // build properties recursively
