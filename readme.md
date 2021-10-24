@@ -7,6 +7,7 @@ Interpreted basic.
 
 TODO:
 -----
+- error in dim list!
 - type assignment (copy)
 - type awareness (?)
 - reference counters?
