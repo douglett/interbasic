@@ -167,9 +167,9 @@ struct InputFile {
 	}
 	int expecttype(const string& type, string& s) {
 		if      (type == "eol")         { if (eol())  return s = peek(), 1; }
-		else if (type == "integer")     { if (is_integer(s = get()))  return 1; }
-		else if (type == "literal")     { if (is_literal(s = get()))  return 1; }
-		else if (type == "identifier")  { if (is_identifier(s = get()))  return 1; }
+		else if (type == "integer")     { if (is_integer(peek()))  return s = get(), 1; }
+		else if (type == "literal")     { if (is_literal(peek()))  return s = get(), 1; }
+		else if (type == "identifier")  { if (is_identifier(peek()))  return s = get(), 1; }
 		throw IBError("expected token; expected ["+type+"], got ["+peek()+"]", lno);
 	}
 	int nextline() {

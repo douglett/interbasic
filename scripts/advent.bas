@@ -121,6 +121,11 @@ function room2
 		print "exits: west"
 		input inp
 		call split: cmd, inp
+		# sanity check
+		call len: cmd
+		if _ret == 0
+			continue
+		end if
 		# all room actions
 		call default_actions: cmd
 		if _ret

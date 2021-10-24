@@ -56,21 +56,22 @@ struct InterBasic {
 		// dim / undim
 		else if (cmd == "dim") {
 			auto& vv = callstack.size() ? callstack.back().vars : vars;
+			// get type and id info
+			string type, ref, id;
+			if (is_identifier(inp.peek(0)) && inp.peek(1) == "[" && inp.peek(2) == "]")
+				{ type = inp.get();  ref = inp.get();  ref += inp.get(); }
+			else if (is_identifier(inp.peek(0)) && (inp.peek(1) == "&" || inp.peek(1) == "@"))
+				{ type = inp.get();  ref = inp.get(); }
+			else if (is_identifier(inp.peek(0)) && is_identifier(inp.peek(1)))
+				{ type = inp.get(); }
+			else
+				{ type = "int"; }
+			// type correction
+			if (type == "integer")  type = "int";
+			if (!type_defined(type))  throw IBError("unknown type: "+type, lno);
+			// 
 			while (!inp.eol()) {
-				// get type and id info
-				string type, id, ref;
-				if (is_identifier(inp.peek(0)) && inp.peek(1) == "[" && inp.peek(2) == "]" && is_identifier(inp.peek(3)))
-					{ type = inp.get();  ref = inp.get();  ref += inp.get();  id = inp.get(); }
-				else if (is_identifier(inp.peek(0)) && (inp.peek(1) == "&" || inp.peek(1) == "@") && is_identifier(inp.peek(2)))
-					{ type = inp.get();  ref = inp.get();  id = inp.get(); }
-				else if (is_identifier(inp.peek(0)) && is_identifier(inp.peek(1)))
-					{ type = inp.get();  id = inp.get(); }
-				else
-					{ type = "int";  inp.expecttype("identifier", id); }
-				// type correction
-				if (type == "integer")  type = "int";
-				if (!type_defined(type))  throw IBError("unknown type: "+type, lno);
-				// initialise
+				inp.expecttype("identifier", id);
 				if (ref == "[]") {
 					heap[++heap_top] = { VAR_ARRAY, .object_type=type };
 					vv[id] = { VAR_ARRAY, .i=heap_top };
@@ -85,7 +86,6 @@ struct InterBasic {
 					inp.expect("=");
 					vv[id] = expr();
 					if (vv[id].type != VAR_ARRAY_REF || heap_get(vv[id]).object_type != type) goto _typeerr2;
-					// throw IBError("here", lno);
 				}
 				else {
 					vv[id] = type_make(type);
@@ -593,6 +593,7 @@ int main() {
 	printf("hello world\n");
 	InterBasic bas;
 	// bas.inp.load("scripts/test.bas");
+	// bas.inp.load("scripts/advent.bas");
 	bas.inp.load("scripts/advent2.bas");
 	printf("-----\n");
 	//bas.showlines();

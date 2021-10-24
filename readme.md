@@ -7,7 +7,6 @@ Interpreted basic.
 
 TODO:
 -----
-- error in dim list!
 - type assignment (copy)
 - type awareness (?)
 - reference counters?
@@ -17,6 +16,7 @@ TODO:
 
 DONE:
 -----
+- fixed error in dim-list parsing
 - typed array pointers (@ ?)
 - typed arrays
 - object pointers
