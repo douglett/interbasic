@@ -60,7 +60,7 @@ function mainloop
 end function
 
 function default_actions
-	dim array& cmd = _arg1
+	dim string@ cmd = _arg1
 	# call split: _arg1: cmd
 	# command checking
 	call strcmp: cmd[0], "quit"
@@ -81,12 +81,11 @@ end function
 function room1
 	dim cmp_east, cmp_e
 	dim string inp
-	dim array cmd
+	dim string [ ] cmd
 	while 1
 		print "You are in a dark room."
 		print "exits: east"
 		input inp
-		call resize: cmd, 0
 		call split: cmd, inp
 		# sanity check
 		call len: cmd
@@ -109,18 +108,18 @@ function room1
 			return
 		end if
 		# call free: cmd
+		# call resize: cmd, 0
 	end while
 end function
 
 function room2
 	dim cmp_west, cmp_w
 	dim string inp
-	dim array cmd
+	dim string[] cmd
 	while 1
 		print "You are in a bright room."
 		print "exits: west"
 		input inp
-		call resize: cmd, 0
 		call split: cmd, inp
 		# all room actions
 		call default_actions: cmd
@@ -138,5 +137,6 @@ function room2
 			return
 		end if
 		# call free: cmd
+		# call resize: cmd, 0
 	end while
 end function

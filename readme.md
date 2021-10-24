@@ -7,8 +7,6 @@ Interpreted basic.
 
 TODO:
 -----
-- typed arrays
-- typed array pointers (@ ?)
 - type assignment (copy)
 - type awareness (?)
 - reference counters?
@@ -18,6 +16,8 @@ TODO:
 
 DONE:
 -----
+- typed array pointers (@ ?)
+- typed arrays
 - object pointers
 - type destructor
 - type constructor
