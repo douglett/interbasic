@@ -153,7 +153,7 @@ struct InterBasic {
 			}
 			else if (cmd == "if") {
 				if      (v.i)  flag_elseif = 0;  // continue to next line
-				else if (v.i == 0 && condition.inner.size())  inp.lno = condition.inner.at(0).pos-1,  flag_elseif = 1;  // goto matching else, set execution to else-mode
+				else if (v.i == 0 && condition.inner.size())  inp.lno = condition.inner.at(0).pos - 1,  flag_elseif = 1;  // goto matching else, set execution to else-mode
 				else if (v.i == 0)  inp.lno = condition.end,  flag_elseif = 0;  // goto matching end-if
 			}
 		}
@@ -209,7 +209,7 @@ struct InterBasic {
 			auto &block_type = inp.get();
 			inp.expecttype("eol");
 			if      (block_type == "if")        flag_elseif = 0;  // make sure we are executing normally
-			else if (block_type == "while")     inp.lno = inp.codemap_get(lno).start;
+			else if (block_type == "while")     inp.lno = inp.codemap_get(lno).start - 1;
 			else if (block_type == "function")  func_return(Var::ZERO);
 			else    throw IBError("unknown end: " + block_type, lno);
 		}
@@ -436,7 +436,7 @@ struct InterBasic {
 		else  inp.lno = inp.codemap_getfunc(id).start;
 	}
 	void func_return(const Var& val) {
-		if (val.type != VAR_INTEGER)  throw IBError("return value must be integer", lno);
+		if (val.type != VAR_INTEGER && val.type != VAR_STRING)  throw IBError("return value must be a basic type (integer, string)", lno);
 		if (callstack.size() == 0)    throw IBError("no local scope", lno);
 		for (auto& vmap : callstack.back().vars)
 			heap_free(vmap.second);  // free local vars
@@ -554,6 +554,12 @@ struct InterBasic {
 			const auto& b = get_def("_arg2");
 			if (a.type != VAR_STRING || b.type != VAR_STRING)  throw IBError("expected string, string", lno);
 			vars["_ret"] = { VAR_INTEGER, .i = a.s == b.s };
+		}
+		else if (id == "strcat") {
+			const auto& a = get_def("_arg1");
+			const auto& b = get_def("_arg2");
+			if (a.type != VAR_STRING || b.type != VAR_STRING)  throw IBError("expected string, string", lno);
+			vars["_ret"] = { VAR_STRING, .i=0, .s = a.s + b.s };
 		}
 		// resize array
 		else if (id == "resize") {
