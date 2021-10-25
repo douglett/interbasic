@@ -472,6 +472,16 @@ struct InterBasic {
 		// else if (type.length() && type.back() == '&')
 		throw IBError("making type, unknown error", lno);
 	}
+	string type_identify(const Var& val) {
+		string type;
+		if      (val.type == VAR_NULL)     type = "null";
+		else if (val.type == VAR_INTEGER)  type = "int";
+		else if (val.type == VAR_STRING)   type = "string";
+		else if (val.type == VAR_OBJECT || val.type == VAR_OBJECT_REF)  type = heap_get(val).object_type;
+		else if (val.type == VAR_ARRAY  || val.type == VAR_ARRAY_REF)   type = heap_get(val).object_type + "[]";
+		else    throw IBError("unknown type", lno);
+		return type;
+	}
 	string stringify(const Var& v) const {
 		switch (v.type) {
 		case VAR_NULL:     return "null";
@@ -538,6 +548,13 @@ struct InterBasic {
 
 		// ---
 
+		// string comparison
+		else if (id == "strcmp") {
+			const auto& a = get_def("_arg1");
+			const auto& b = get_def("_arg2");
+			if (a.type != VAR_STRING || b.type != VAR_STRING)  throw IBError("expected string, string", lno);
+			vars["_ret"] = { VAR_INTEGER, .i = a.s == b.s };
+		}
 		// resize array
 		else if (id == "resize") {
 			auto& arrayref = get_def("_arg1");
@@ -552,12 +569,16 @@ struct InterBasic {
 				array.arr[i] = type_make(array.object_type);  // make if larger
 			vars["_ret"] = Var::ZERO;
 		}
-		// string comparison
-		else if (id == "strcmp") {
-			const auto& a = get_def("_arg1");
-			const auto& b = get_def("_arg2");
-			if (a.type != VAR_STRING || b.type != VAR_STRING)  throw IBError("expected string, string", lno);
-			vars["_ret"] = { VAR_INTEGER, .i = a.s == b.s };
+		// array push
+		else if (id == "push") {
+			auto& arrayref  = get_def("_arg1");
+			const auto& val = get_def("_arg2");
+			auto& array = heap_get(arrayref);
+			string type = type_identify(val);
+			if (arrayref.type != VAR_ARRAY_REF)  throw IBError("expected array", lno);
+			if (array.object_type != type)  throw IBError("expected matching types (got: "+array.object_type+", "+type+")", lno);
+			array.arr.push_back(val);
+			vars["_ret"] = { VAR_INTEGER, .i=(int32_t)array.arr.size() };
 		}
 		// split string by whitespace
 		else if (id == "split") {
@@ -580,6 +601,18 @@ struct InterBasic {
 				else  s += c;
 			if (s.size())  arr.push_back({ VAR_STRING, .i=0, .s=s });
 			vars["_ret"] = { VAR_INTEGER, .i=(int32_t)arr.size() };
+		}
+		// join string
+		else if (id == "join") {
+			auto& arrayref  = get_def("_arg1");
+			const auto& val = get_def("_arg2");
+			if (arrayref.type != VAR_ARRAY_REF || heap_get(arrayref).object_type != "string" || val.type != VAR_STRING)
+				throw IBError("expected string[], string", lno);
+			auto& arr = heap_get(arrayref).arr;
+			string s;
+			for (int i = 0; i < arr.size(); i++)
+				s += (i > 0 ? val.s : "") + arr.at(i).s;
+			vars["_ret"] = { VAR_STRING, .i=0, .s=s };
 		}
 		else  return 0;
 		// found

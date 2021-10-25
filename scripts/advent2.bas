@@ -22,14 +22,40 @@ function buildrooms
 	call resize: rooms, 1
 	let rooms[0].name = "entrance"
 	let rooms[0].description = "A dark cave mouth yawns forbodingly here."
+	let rooms[0].exit_e = "cave1"
+	# let rooms[0].exit_w = "forest1"
 end function
 
 function mainloop
-	dim string inp
-	dim string[] cmd
+	dim string inp, exitstr
+	dim string[] cmd, exits
 	dim cmp_q, cmp_quit, cmp_l, cmp_look
+	dim exit_e
 	while 1
+		# calculate exits
+		call resize: exits, 0
+		call len: rooms[croom].exit_n
+		if _ret > 0
+			call push: exits, "n"
+		end if
+		call len: rooms[croom].exit_s
+		if _ret > 0
+			call push: exits, "s"
+		end if
+		call len: rooms[croom].exit_e
+		if _ret > 0
+			call push: exits, "e"
+		end if
+		call len: rooms[croom].exit_w
+		if _ret > 0
+			call push: exits, "w"
+		end if
+		call join: exits, ", "
+		let exitstr = _ret
+
+		# show room
 		print rooms[croom].description
+		print "exits:", exitstr
 		input inp
 		call split: cmd, inp
 		
@@ -46,6 +72,7 @@ function mainloop
 		let cmp_l = _ret
 		call strcmp: cmd[0], "look"
 		let cmp_look = _ret
+
 		if cmp_q || cmp_quit
 			return
 		else if cmp_l || cmp_look
