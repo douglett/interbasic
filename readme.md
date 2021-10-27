@@ -1,18 +1,15 @@
 InterBasic
 ==========
 
-Interpreted basic.
+Interpreted basic. A simple test project, to prepare for the next compiler version.
+
+Actually, this is the first language I have made which has actually worked! A real milestone.
 
 
 
 TODO:
 -----
-- type assignment (copy)
-- type awareness (?)
-- reference counters?
--
-- function calls in expressions 
-	- actually, this will break the call stack so can't do this now
+- :)
 
 DONE:
 -----
@@ -46,3 +43,10 @@ DONE:
 - array subscripts in expressions
 - object properties in expressions
 - first item
+
+WONTDO:
+-------
+- type assignment (copy)
+- reference counters?
+- function calls in expressions 
+	- actually, this will break the call stack so can't do this now
