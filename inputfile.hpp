@@ -106,11 +106,11 @@ struct InputFile {
 			}
 		}
 		// show results
-		for (const auto& c : codemap) {
-			printf("%02d : %02d   %s  %s\n", c.start+1, c.end+1, c.type.c_str(), c.fname.c_str());
-			for (auto& in : c.inner)
-				printf("   %02d   %s\n", in.pos, in.type.c_str());
-		}
+		// for (const auto& c : codemap) {
+		// 	printf("%02d : %02d   %s  %s\n", c.start+1, c.end+1, c.type.c_str(), c.fname.c_str());
+		// 	for (auto& in : c.inner)
+		// 		printf("   %02d   %s\n", in.pos, in.type.c_str());
+		// }
 	}
 
 	const codemap_t& codemap_get(int line) const {

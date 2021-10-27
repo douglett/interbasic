@@ -16,6 +16,7 @@ TODO:
 
 DONE:
 -----
+- text adventure!
 - fixed error in dim-list parsing
 - typed array pointers (@ ?)
 - typed arrays
